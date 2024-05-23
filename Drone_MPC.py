@@ -16,18 +16,18 @@ control = Matrix([w1, w2, w3, w4])
 sigma1 = kF * (w1 + w2 + w3 + w4)
 
 xdot = Matrix([
-    x + dt*x_dot,
-    y+ dt*y_dot,
-    z+ dt*z_dot,
-    phi + dt*(p * cos(phi) + r * sin(psi)),
-    psi+dt*(q - r * cos(psi) * tan(phi) + p * sin(psi) * tan(phi)),
-    theta +dt*((r * cos(psi) - p * sin(psi)) / cos(phi)),
-    x_dot+ dt*((cos(theta) * sin(psi) + cos(psi) * sin(phi) * sin(theta)) * sigma1 / m),
-    y_dot+ dt*((sin(psi) * sin(theta) - cos(psi) * cos(theta) * sin(phi)) * sigma1 / m),
-    z_dot+ dt*(cos(phi) * cos(psi) * sigma1 / m - g),
-    p+dt*((Iyy * q * r - Izz * q * r + L * kF * w2 - L * kF * w4) / Ixx),
-    q+dt*(-(Ixx * p * r - Izz * p * r + L * kF * w1 + L * kF * w3) / Iyy),
-    r+dt*((kM * w1 - kM * w2 + kM * w3 - kM * w4 + Ixx * p * q - Iyy * p * q) / Izz)
+    x_dot,
+    y_dot,
+    *z_dot,
+    (p * cos(phi) + r * sin(psi)),
+    (q - r * cos(psi) * tan(phi) + p * sin(psi) * tan(phi)),
+    ((r * cos(psi) - p * sin(psi)) / cos(phi)),
+    ((cos(theta) * sin(psi) + cos(psi) * sin(phi) * sin(theta)) * sigma1 / m),
+    ((sin(psi) * sin(theta) - cos(psi) * cos(theta) * sin(phi)) * sigma1 / m),
+    (cos(phi) * cos(psi) * sigma1 / m - g),
+    ((Iyy * q * r - Izz * q * r + L * kF * w2 - L * kF * w4) / Ixx),
+    (-(Ixx * p * r - Izz * p * r + L * kF * w1 + L * kF * w3) / Iyy),
+    ((kM * w1 - kM * w2 + kM * w3 - kM * w4 + Ixx * p * q - Iyy * p * q) / Izz)
 ])
 
 # # Compute Jacobians
