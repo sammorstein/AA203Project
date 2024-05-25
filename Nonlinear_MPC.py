@@ -1,6 +1,77 @@
 import casadi as ca
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation
+
+def rot_X(t):
+  return np.array([[1, 0, 0], [0, np.cos(t), -np.sin(t)], [0, np.sin(t), np.cos(t)]])
+
+def rot_Y(t):
+  return np.array([[np.cos(t), 0, np.sin(t)], [0, 1, 0], [-np.sin(t), 0, np.cos(t)]])
+
+def rot_Z(t):
+  return np.array([[np.cos(t), -np.sin(t), 0], [np.sin(t), np.cos(t), 0], [0 ,0 ,1]])
+
+def get_R(phi, psi, theta):
+  '''
+  TO DO: define rotation matrix as per convention in [4]
+  '''
+#   We also use Z − X − Y Euler angles
+# to define the roll, pitch, and yaw angles (φ, θ, and ψ) as a
+# local coordinate system
+
+  Rz = rot_Z(theta)
+  Rx = rot_X(phi)
+  Ry = rot_Y(psi)
+
+  R_BW = Rz @ Rx @ Ry
+
+  return R_BW
+
+def quad_control(sdes, dsdes, ddsdes, dddsdes, x):
+
+    m = 2.05
+    kF = 1.0
+    kM = 1.0
+    L = 0.07
+    Ixx = 6.622e-3
+    Iyy = 6.616e-3
+    Izz = 1.240e-2
+    g = 9.81
+    Kp = 50 * np.eye(3)  # for position error
+    Kv = 5 * np.eye(3)  # for velocity error
+
+    # let's assume we can observe the full state x but can specify only x, y, z, theta and their derivatives in the trajectory
+    R = get_R(x[3], x[4], x[5])
+    # PD control of force
+    force = -Kp@np.transpose(x[0:3] - sdes[0:3]) - Kv@np.transpose(x[6:9] - dsdes[0:3]) + m*g*np.array([0,0,1]) + m*ddsdes[0:3]
+    f = np.dot(force, R[:, 2]) # force magnitude
+
+    # desired orientation (Bdes is desired body frame, Cdes is intermediate frame as defined in [4])
+    zBdes = force*1/np.linalg.norm(force)
+    xCdes = np.array([np.cos(sdes[3]), np.sin(sdes[3]), 0])
+    yBdes = np.cross(zBdes, xCdes)/np.linalg.norm(np.cross(zBdes, xCdes))
+    xBdes = np.cross(yBdes, zBdes)
+    Rdes = np.column_stack((xBdes, yBdes, zBdes))
+
+    ori = Rotation.from_matrix(Rdes)
+    ang = ori.as_euler('zyx')
+
+    hw = m/f*(dddsdes[0:3] - np.dot(zBdes, dddsdes[0:3])*zBdes)
+
+    # desired angular velocity
+    omegades = np.array([-np.dot(hw, yBdes), np.dot(hw, xBdes), dsdes[3]*np.dot(np.array([0,0,1]), zBdes)])
+
+    reference_state = np.zeros(12)
+    reference_state[0:3] = sdes[0:3]
+    reference_state[3] = ang[2]
+    reference_state[4] = ang[1]
+    reference_state[5] = ang[0]
+    reference_state[6:9] = dsdes[0:3]
+    reference_state[9:] = omegades
+
+    return reference_state
+
 
 def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, N=50, T=0.1):
     # Constants
@@ -64,9 +135,11 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, N=50, T=0.1
     # Define the dynamics constraints and cost
     # u_prev_k = U_prev
     for k in range(N):
-        yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[4, k])  # [x, y, z, psi]
+        # yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[5, k])  # [x, y, z, theta]
+        yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[5, k], X[6,k], X[7,k], X[8,k])
         rk = reference_trajectory[:, k]
         cost += ca.mtimes([(yk - rk).T, Q, (yk - rk)]) + ca.mtimes([Delta_U[:, k].T, R, Delta_U[:, k]])
+        # cost += ca.mtimes([(X[:,k] - rk).T, Q, (X[:,k] - rk)]) + ca.mtimes([Delta_U[:, k].T, R, Delta_U[:, k]])
         x_next = X[:, k] + T * f(X[:, k], Delta_U[:, k], U_prev[:,k])
         g.append(X[:, k + 1] - x_next)
         g.append(U_prev[:,k+1] - U_prev[:,k] + Delta_U[:, k])
@@ -78,8 +151,10 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, N=50, T=0.1
         # g.append(U_prev[3,k+1])
 
     # Terminal cost
-    yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[4, N])
+    # yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[4, N])
+    yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[5, N], X[6, N], X[7, N], X[8, N])
     rN = reference_trajectory[:, N]
+    # cost += ca.mtimes([(X[:,N] - rN).T, Qn, (X[:,N] - rN)])
     cost += ca.mtimes([(yN - rN).T, Qn, (yN - rN)])
 
     # Create a single vector of decision variables
@@ -182,6 +257,7 @@ def plot_results(X_sol, U_sol, ref_trajectory):
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
     ax.legend()
+    ax.set_aspect('equal')
 
     plt.show()
 
@@ -251,17 +327,31 @@ trajw = 2*np.pi*res/np.size(t)*cycles #frequency
 pathradius = 1
 tilt_amplitude = 0.1
 
+reference_trajectory = np.zeros([12, np.size(t)])
+initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
+
 for i in range(0, np.size(t)):
   circular[:, i] = np.transpose(np.array([pathradius*np.cos(trajw*t[i]), pathradius*np.sin(trajw*t[i]), tilt_amplitude*np.sin(trajw*t[i]/2), trajw*t[i], -pathradius*trajw*np.sin(trajw*t[i]), pathradius*trajw*np.cos(trajw*t[i]), tilt_amplitude*trajw/4*np.cos(trajw*t[i]/2),  trajw, -pathradius*trajw**2*np.cos(trajw*t[i]), -pathradius*trajw**2*np.sin(trajw*t[i]), -tilt_amplitude*trajw**2*np.sin(trajw*t[i]/2)/8, 0, pathradius*trajw**3*np.sin(trajw*t[i]), -pathradius*trajw**3*np.cos(trajw*t[i]), -tilt_amplitude*trajw**3*np.cos(trajw*t[i]/2)/16, 0]))
+  if i >0:
+    reference_trajectory[:,i] = quad_control(circular[0:4, i], circular[4:8, i], circular[8:12, i], circular[12:16, i],reference_trajectory[:,i-1])
+  else:
+    reference_trajectory[:, i] = quad_control(circular[0:4, i], circular[4:8, i], circular[8:12, i], circular[12:16, i], initial_state)
 
-ref_trajectory = circular[:4, :]  # Use position and orientation (x, y, z, theta)
 
-N = 750
+
+ref_trajectory = circular[:7, :]  # Use position and orientation (x, y, z, theta)
+
+N = 500
 dt = 1 / res
-Q = 20*np.diag([1, 1, 1, 1])
-Qn = 20*np.diag([1, 1, 1, 1])
+
+# Q = 20 * np.diag([1, 1, 1, .1, .1, 1, 1, 1, 1, .1, .1, .1])
+# Qn = 20 * np.diag([1, 1, 1, .1, .1, 1, 1, 1, 1, .1, .1, .1])
+Q = 20*np.diag([1, 1, 1, 1, 1, 1, 1])
+Qn = 20*np.diag([1, 1, 1, 1, 1, 1, 1])
+# Q = 20*np.diag([1, 1, 1, 1]) work well for OL
+# Qn = 20*np.diag([1, 1, 1, 1])
 R = 1*np.diag([1, 1, 1, 1])
-initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
+# R = np.zeros((4,4))
 T = 1
 u_prev = 5*np.ones(4)
 x_mpc = np.zeros((T, 12, N+1))
@@ -278,6 +368,16 @@ for t in range(T):
         U_sol = u_mpc[t,:,1]
     else:
         U_sol = np.vstack((U_sol,u_mpc[t,:,1]))
+
+    # x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:, t + t * (N - 1):], u_prev, Q, Qn, R, N, dt)
+    # for i in range(N):
+    #     x = x + dt * get_dyn(x, u_mpc[t, :, i + 1])
+    #     u_prev = u_mpc[t, :, -1]
+    #     X_sol = np.vstack((X_sol, x))
+    #     if t == 0 and i == 0:
+    #         U_sol = u_mpc[t, :, i]
+    #     else:
+    #         U_sol = np.vstack((U_sol, u_mpc[t, :, i]))
 
 # u_test = np.array([5.0276,5.0276,5.0276,5.0276])
 # x = np.zeros(12)
