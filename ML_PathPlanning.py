@@ -2,148 +2,195 @@
 Created May 27: RL Path Planning 
 - script to do 
 '''
-
 import numpy as np
-import scipy.optimize
-import random
-
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 class Drone:
     def __init__(self, position, fuel, payload):
-        self.position = position
+        self.position = np.array(position)
         self.fuel = fuel
         self.payload = payload
     
     def move(self, move):
-        # deterministic, cost scales with the payload and distance desired
         self.position += np.array(move)
-
-        # # potentially have less maneuverability if the payload is heavy/ low on fuel
-        # var = 0.1*self.payload/self.fuel
-        # self.position += perturb(move, var)
-        self.fuel -= np.linalg.norm(move)*self.payload
+        self.fuel -= np.linalg.norm(move) * self.payload
 
     def state(self):
-        return self.position, self.fuel, self.payload
-
-
+        return tuple(self.position), self.fuel, self.payload
 
 class DroneEnvironment:
     def __init__(self, gridsize, warehouse_location, houses_location, obstacles):
-        '''
-        constructor just makes a map and a drone that'll move around in it
-        also the warehouse, house location, etc. 
-        '''
         self.grid = gridsize
-        self.warehouse = warehouse_location
-        self.houses = houses_location
-        self.drone = Drone(self.warehouse, 10, 0)
-        self.obstacles = obstacles
-        self.delivered = np.zeros(len(self.houses), dtype = bool)
+        self.warehouse = np.array(warehouse_location)
+        self.houses = [np.array(house) for house in houses_location]
+        self.drone = Drone(self.warehouse, 100, 0)
+        self.obstacles = [np.array(obstacle) for obstacle in obstacles]
+        self.delivered = np.zeros(len(self.houses), dtype=bool)
         self.delivery = self.houses.copy()
+        
+        self.utility = np.zeros(gridsize)
+        self.utility[tuple(self.warehouse)] = -10
+        for i, h in enumerate(self.delivery):
+            self.utility[tuple(h)] = 10
+        for obstacle in self.obstacles:
+            self.utility[tuple(obstacle)] = -100
+        print(self.utility)
 
     def isdone(self):
         return np.all(self.delivered)
 
     def reset(self):
-        self.drone = Drone(self.warehouse, 10, 1)  # Reset fuel and payload
+        self.drone = Drone(self.warehouse, 10, 1)
         self.delivered = np.zeros(len(self.houses), dtype=bool)
         self.delivery = self.houses.copy()
         return self.get_state()
     
     def get_state(self):
-        return (tuple(self.drone.position), self.drone.fuel, tuple(self.delivery))
+        return self.drone.position, self.drone.fuel, self.delivery
 
     def step(self, action):
+        prev_fuel = self.drone.fuel
         self.drone.move(action)
-        reward = -1  # Cost for moving
+        cost = -(self.drone.fuel - prev_fuel)
+        # print('state',self.get_state()[0])
+        future_state = self.get_state()
+        # print(future_state)
+        # print('utility at that state',self.utility[tuple(future_state[0])])
+        return self.get_state(), self.utility[tuple(future_state[0])], self.isdone()
 
-        for i, house in enumerate(self.delivery):
-            if not self.delivered[i] and np.array_equal(self.drone.position, house):
-                self.delivered[i] = True
-                reward += 10  # Reward for successful delivery
-
-        return self.get_state(), reward, self.isdone()
-
-    def get_possible_actions(self):
-        possible_moves = [
-            (-1, 0, 0), (1, 0, 0), (0, -1, 0), (0, 1, 0), (0, 0, -1), (0, 0, 1)
-        ]  # Up, Down, Left, Right, Down, Up in 3D
+    def possible_actions(self, pos):
+        possible_moves = np.array([[i, j, k] for i in [-1, 0, 1] for j in [-1, 0, 1] for k in [-1, 0, 1] if not (i == 0 and j == 0 and k == 0)])
         valid_moves = []
+        if pos == None:
+            pos = self.drone.position
         for move in possible_moves:
-            new_position = self.drone.position + np.array(move)
+            new_position = np.array(pos) + np.array(move)
             if (0 <= new_position[0] < self.grid[0] and
                 0 <= new_position[1] < self.grid[1] and
-                0 <= new_position[2] < self.grid[2] and
-                not any(np.array_equal(new_position, obs) for obs in self.obstacles)):
+                0 <= new_position[2] < self.grid[2]):
+                # print('new position', new_position)
                 valid_moves.append(move)
-        return valid_moves
+        return np.array(valid_moves)
 
+def value_iteration(k_max, drone_mdp, gamma):
+    dim = np.array(drone_mdp.grid+(27,4))
+    Qvalues = np.empty(dim)
+    optimal_utility = np.copy(drone_mdp.utility)
+    for k_iter in range(k_max):
+        print('Iteration: ',k_iter)
+        for i in range(dim[0]):
+            for j in range(dim[1]):
+                for k in range(dim[2]):
+                    poss_a = drone_mdp.possible_actions((i,j,k))
+                    for a in range(len(poss_a)):
+                        current_cost = optimal_utility[i,j,k]
+                        next_step_cost = optimal_utility[i+poss_a[a][0], j+poss_a[a][1], k+poss_a[a][2]]
+                        Qvalues[i, j, k, a] = np.append(poss_a[a], (current_cost+gamma*next_step_cost))
+                        q__ = Qvalues[i,j,k]
+                        optimal_utility[i,j,k] = np.argmax(q__[:,3])
+    return Qvalues, optimal_utility
 
-def perturb(array, variance):
-    for i in range(len(array)):
-        array[i]*= np.random.normal(1, variance)
-
-
-# Monte Carlo Reinforcement Learning Agent
-class MonteCarloAgent:
-    def __init__(self, env, num_episodes, gamma=0.9, epsilon=0.1):
-        self.env = env
-        self.num_episodes = num_episodes
-        self.gamma = gamma
-        self.epsilon = epsilon
-        self.q_table = {}
-        self.returns = {}
-
-    def choose_action(self, state):
-        # Epsilon-greedy action selection
-        if random.uniform(0, 1) < self.epsilon:
-            return random.choice(self.env.get_possible_actions())
-        else:
-            q_values = self.q_table.get(state, {})
-            if not q_values:
-                return random.choice(self.env.get_possible_actions())
-            max_q_value = max(q_values.values())
-            actions_with_max_q_value = [action for action, q_value in q_values.items() if q_value == max_q_value]
-            return random.choice(actions_with_max_q_value)
-
-    def update_q_table(self, episode):
-        G = 0
-        for state, action, reward in reversed(episode):
-            G = self.gamma * G + reward
-            if not self.returns.get((state, action)):
-                self.returns[(state, action)] = []
-            self.returns[(state, action)].append(G)
-            self.q_table.setdefault(state, {})
-            self.q_table[state][action] = np.mean(self.returns[(state, action)])
-
-    def train(self):
-        for episode_num in range(self.num_episodes):
-            episode = []
-            state = self.env.reset()
-            while not self.env.isdone():
-                action = self.choose_action(state)
-                next_state, reward, done = self.env.step(action)
-                episode.append((state, action, reward))
-                state = next_state
-            self.update_q_table(episode)
-
-# Initialize environment
-grid_size = (5, 5, 5)  # 5x5x5 grid
-warehouse_pos = (0, 0, 0)
-houses_location = [(2, 2, 2), (4, 4, 4), (1, 3, 1)]
-obstacles = [(2, 2, 1), (3, 3, 3)]  # Example obstacles
+# Initialize the environment
+grid_size = (20, 20, 5)
+warehouse_pos = (10, 10, 0)
+houses_location = [(5, 5, 0), (19, 0, 0), (18, 3, 0)]
+obstacles = [(10, 8, 0), (8, 8, 0)]
 env = DroneEnvironment(grid_size, warehouse_pos, houses_location, obstacles)
+util = env.utility
+non_zero_indices = np.argwhere(util != 0)
 
-# Initialize and train agent
-num_episodes = 1000
-agent = MonteCarloAgent(env, num_episodes)
-agent.train()
+# Print the indices where util is not equal to 0
+print("Indices where util != 0:")
+for idx in non_zero_indices:
+    print(idx)
+Qvalues, optimal_q = value_iteration(10, env, 0.75)
 
-# Example usage
-state = env.reset()
-done = False
-while not done:
-    action = agent.choose_action(state)
-    state, reward, done = env.step(action)
-    print(f"Drone moved to {state[0]}, Remaining deliveries: {state[2]}, Reward: {reward}")
+# Extract the Q-values for plotting
+x, y, z, q_values = [], [], [], []
+for i in range(grid_size[0]):
+    for j in range(grid_size[1]):
+        for k in range(grid_size[2]):
+            Q = Qvalues[i,j,k]
+            max_idx_q = np.argmax(Q[:,3])
+            opt_a_q = Q[max_idx_q, :3]
+            q_value = Q[max_idx_q,3]
+            
+            if q_value < 0 or q_value > 0:
+                x.append(i)
+                y.append(j)
+                z.append(k)
+                q_values.append(q_value)
+
+# Create a 3D scatter plot
+if x:
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+    sc = ax.scatter(x, y, z, c=q_values, cmap='viridis')
+    plt.colorbar(sc, label='Q-Value')
+    ax.set_xlabel('X Coordinate')
+    ax.set_ylabel('Y Coordinate')
+    ax.set_zlabel('Z Coordinate')
+    plt.title('3D Plot of Q-Values (|Q| > 1)')
+    plt.show()
+else:
+    print("No points with |Q| != 0 to plot.")
+
+
+def simulate_optimal_path(Qvalues, warehouse_position):
+    current_position = warehouse_position
+    path = [current_position]
+
+    for _ in range(100):
+        # Extract the Q-values for the current position
+        i,j,k = current_position
+        Q = Qvalues[i,j,k]
+
+        # Find the action with the maximum Q-value
+        max_idx_q = np.argmax(Q[:, 3])
+        optimal_action = Q[max_idx_q, :3]
+
+        # Calculate the next position based on the optimal action
+        # Calculate the next position based on the optimal action
+        next_position = tuple(int(x) for x in np.array(current_position) + optimal_action)
+
+        # Append the next position to the path
+        path.append(next_position)
+
+        # Check if the next position is a terminal state (i.e., no more value to gain)
+        if np.all(Q[max_idx_q, 3] == 0):
+            break
+
+        # Update the current position
+        current_position = next_position
+
+    return path
+
+# Simulate the optimal path starting from the warehouse position
+optimal_path = simulate_optimal_path(Qvalues, warehouse_pos)
+
+# Print the optimal path
+print("Optimal Path:")
+for i, position in enumerate(optimal_path):
+    print(f"Step {i + 1}: {position}")
+
+# Extract x, y, z coordinates from the path
+x_path = [position[0] for position in optimal_path]
+y_path = [position[1] for position in optimal_path]
+z_path = [position[2] for position in optimal_path]
+
+# Create a 3D plot
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+
+# Plot the optimal path
+ax.plot(x_path, y_path, z_path, marker='o', markersize=5, color='blue')
+
+# Set labels and title
+ax.set_xlabel('X Coordinate')
+ax.set_ylabel('Y Coordinate')
+ax.set_zlabel('Z Coordinate')
+plt.title('Optimal Path in 3D')
+
+# Show the plot
+plt.show()
