@@ -538,9 +538,9 @@ for t in range(T):
     u_prev = u_mpc[t,:,1]
     X_sol = np.vstack((X_sol,x))
     if t == 0:
-        U_sol = u_mpc[t,:,1]
+        U_sol = u_mpc[t,:,0]
     else:
-        U_sol = np.vstack((U_sol,u_mpc[t,:,1]))
+        U_sol = np.vstack((U_sol,u_mpc[t,:,0]))
 
     # x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:, t + t * (N - 1):], u_prev, Q, Qn, R, N, dt)
     # for i in range(N):
