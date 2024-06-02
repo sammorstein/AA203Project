@@ -28,15 +28,30 @@ def get_R(phi, psi, theta):
 
   return R_BW
 
-def quad_control(sdes, dsdes, ddsdes, dddsdes, x):
-
-    m = 2.05
+def quad_control(sdes, dsdes, ddsdes, dddsdes, x,blocks):
+    if blocks == 0:
+        m = 2.05
+        Ixx = 6.622e-3
+        Iyy = 6.616e-3
+        Izz = 1.240e-2
+    if blocks == 1:
+        m = 2.55
+        Ixx = 7.065e-3
+        Iyy = 7.059e-3
+        Izz = 1.260e-2
+    if blocks == 2:
+        m = 3.05
+        Ixx = 8.445e-3
+        Iyy = 8.439e-3
+        Izz = 1.281e-2
+    if blocks == 3:
+        m = 3.55
+        Ixx = 1.139e-2
+        Iyy = 1.139e-2
+        Izz = 1.302e-2
     kF = 1.0
     kM = 1.0
     L = 0.07
-    Ixx = 6.622e-3
-    Iyy = 6.616e-3
-    Izz = 1.240e-2
     g = 9.81
     Kp = 50 * np.eye(3)  # for position error
     Kv = 5 * np.eye(3)  # for velocity error
@@ -73,20 +88,39 @@ def quad_control(sdes, dsdes, ddsdes, dddsdes, x):
     return reference_state
 
 
-def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=0.1):
+def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, N=50, T=0.1, blocks=0):
     # Constants
-    m = 2.05
+    if blocks == 0:
+        m = 2.05
+        Ixx = 6.622e-3
+        Iyy = 6.616e-3
+        Izz = 1.240e-2
+    if blocks == 1:
+        m = 2.55
+        Ixx = 7.065e-3
+        Iyy = 7.059e-3
+        Izz = 1.260e-2
+    if blocks == 2:
+        m = 3.05
+        Ixx = 8.445e-3
+        Iyy = 8.439e-3
+        Izz = 1.281e-2
+    if blocks == 3:
+        m = 3.55
+        Ixx = 1.139e-2
+        Iyy = 1.139e-2
+        Izz = 1.302e-2
     kF = 1.0
     kM = 1.0
     k = 1.0
     L = 0.07
-    Ixx = 6.622e-3
-    Iyy = 6.616e-3
-    Izz = 1.240e-2
     g = 9.81
-    nominal_mv = .25*m*g*np.array([1,1,1,1])
+
+    nominal_mv = .25 * m * g * np.array([1, 1, 1, 1])
     # State and control variables
-    x, y, z, phi, psi, theta, x_dot, y_dot, z_dot, p, q, r = ca.MX.sym('x'), ca.MX.sym('y'), ca.MX.sym('z'), ca.MX.sym('phi'), ca.MX.sym('psi'), ca.MX.sym('theta'), ca.MX.sym('x_dot'), ca.MX.sym('y_dot'), ca.MX.sym('z_dot'), ca.MX.sym('p'), ca.MX.sym('q'), ca.MX.sym('r')
+    x, y, z, phi, psi, theta, x_dot, y_dot, z_dot, p, q, r = ca.MX.sym('x'), ca.MX.sym('y'), ca.MX.sym('z'), ca.MX.sym(
+        'phi'), ca.MX.sym('psi'), ca.MX.sym('theta'), ca.MX.sym('x_dot'), ca.MX.sym('y_dot'), ca.MX.sym(
+        'z_dot'), ca.MX.sym('p'), ca.MX.sym('q'), ca.MX.sym('r')
     w1, w2, w3, w4 = ca.MX.sym('w1'), ca.MX.sym('w2'), ca.MX.sym('w3'), ca.MX.sym('w4')
     # delta_u1, delta_u2, delta_u3, delta_u4 = ca.MX.sym('delta_u1'), ca.MX.sym('delta_u2'), ca.MX.sym('delta_u3'), ca.MX.sym('delta_u4')
     # u_prev = ca.MX.sym('u_prev', 4)
@@ -122,42 +156,42 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
         r,
         q,
         (k * (ca.sin(phi) * ca.sin(psi) + ca.cos(phi) * ca.cos(psi) * ca.sin(theta)) * (
-                    w1 + w2 + w3 + w4)) / m,
+                w1 + w2 + w3 + w4)) / m,
         -(k * (ca.cos(psi) * ca.sin(phi) - ca.cos(phi) * ca.sin(psi) * ca.sin(theta)) * (
-                    w1 + w2 + w3 + w4)) / m,
+                w1 + w2 + w3 + w4)) / m,
         (k * ca.cos(phi) * ca.cos(theta) * (w1 + w2 + w3 + w4)) / m - g,
         (ca.sin(2 * phi) * ca.sin(theta) * (Iyy / 2 - Izz / 2) * (
-                    k * L * w1 - k * L * w3 - (Ixx * q ** 2 * ca.sin(2 * theta)) / 2 + (
-                        Iyy * q ** 2 * ca.sin(2 * theta)) / 2 + Ixx * p * q * ca.cos(
-                theta) - Iyy * p * q * ca.cos(theta) + Izz * p * q * ca.cos(
-                theta) - Iyy * p * r * ca.sin(2 * phi) + Izz * p * r * ca.sin(
-                2 * phi) - Iyy * q ** 2 * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
-                theta) + Izz * q ** 2 * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
-                theta) + 2 * Iyy * p * q * ca.cos(phi) ** 2 * ca.cos(
-                theta) - 2 * Izz * p * q * ca.cos(phi) ** 2 * ca.cos(theta))) / (
-                    Iyy * Izz * ca.cos(theta)) - ((Iyy * Izz + Ixx * Iyy * ca.sin(theta) ** 2 - Iyy * Izz * ca.sin(
+                k * L * w1 - k * L * w3 - (Ixx * q ** 2 * ca.sin(2 * theta)) / 2 + (
+                Iyy * q ** 2 * ca.sin(2 * theta)) / 2 + Ixx * p * q * ca.cos(
+            theta) - Iyy * p * q * ca.cos(theta) + Izz * p * q * ca.cos(
+            theta) - Iyy * p * r * ca.sin(2 * phi) + Izz * p * r * ca.sin(
+            2 * phi) - Iyy * q ** 2 * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
+            theta) + Izz * q ** 2 * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
+            theta) + 2 * Iyy * p * q * ca.cos(phi) ** 2 * ca.cos(
+            theta) - 2 * Izz * p * q * ca.cos(phi) ** 2 * ca.cos(theta))) / (
+                Iyy * Izz * ca.cos(theta)) - ((Iyy * Izz + Ixx * Iyy * ca.sin(theta) ** 2 - Iyy * Izz * ca.sin(
             theta) ** 2 - Ixx * Iyy * ca.sin(phi) ** 2 * ca.sin(theta) ** 2 + Ixx * Izz * ca.sin(
             phi) ** 2 * ca.sin(theta) ** 2) * (k * L * w4 - k * L * w2 - (
-                    Iyy * r ** 2 * ca.sin(2 * phi)) / 2 + (Izz * r ** 2 * ca.sin(
+                Iyy * r ** 2 * ca.sin(2 * phi)) / 2 + (Izz * r ** 2 * ca.sin(
             2 * phi)) / 2 + Ixx * q * r * ca.cos(theta) - Iyy * q * r * ca.cos(
             theta) + Izz * q * r * ca.cos(theta) + Iyy * q ** 2 * ca.cos(phi) * ca.cos(
             theta) ** 2 * ca.sin(phi) - Izz * q ** 2 * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
             phi) + 2 * Iyy * q * r * ca.cos(phi) ** 2 * ca.cos(
             theta) - 2 * Izz * q * r * ca.cos(phi) ** 2 * ca.cos(theta))) / (
-                    Ixx * Iyy * Izz * (ca.sin(theta) ** 2 - 1)) - (
-                    ca.sin(theta) * (Iyy - Iyy * ca.sin(phi) ** 2 + Izz * ca.sin(phi) ** 2) * (
-                        Ixx * p * r * ca.cos(theta) - Ixx * q * r * ca.sin(
-                    2 * theta) + Iyy * r ** 2 * ca.cos(phi) * ca.sin(phi) * ca.sin(
-                    theta) - Izz * r ** 2 * ca.cos(phi) * ca.sin(phi) * ca.sin(
-                    theta) - Iyy * p * r * ca.cos(phi) ** 2 * ca.cos(
-                    theta) + Izz * p * r * ca.cos(phi) ** 2 * ca.cos(
-                    theta) + Iyy * p * r * ca.cos(theta) * ca.sin(
-                    phi) ** 2 - Izz * p * r * ca.cos(theta) * ca.sin(
-                    phi) ** 2 - 2 * Iyy * p * q * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
-                    phi) + 2 * Izz * p * q * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
-                    phi) + 2 * Izz * q * r * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
-                    theta) + 2 * Iyy * q * r * ca.cos(theta) * ca.sin(phi) ** 2 * ca.sin(
-                    theta))) / (Iyy * Izz * (ca.sin(theta) ** 2 - 1)),
+                Ixx * Iyy * Izz * (ca.sin(theta) ** 2 - 1)) - (
+                ca.sin(theta) * (Iyy - Iyy * ca.sin(phi) ** 2 + Izz * ca.sin(phi) ** 2) * (
+                Ixx * p * r * ca.cos(theta) - Ixx * q * r * ca.sin(
+            2 * theta) + Iyy * r ** 2 * ca.cos(phi) * ca.sin(phi) * ca.sin(
+            theta) - Izz * r ** 2 * ca.cos(phi) * ca.sin(phi) * ca.sin(
+            theta) - Iyy * p * r * ca.cos(phi) ** 2 * ca.cos(
+            theta) + Izz * p * r * ca.cos(phi) ** 2 * ca.cos(
+            theta) + Iyy * p * r * ca.cos(theta) * ca.sin(
+            phi) ** 2 - Izz * p * r * ca.cos(theta) * ca.sin(
+            phi) ** 2 - 2 * Iyy * p * q * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
+            phi) + 2 * Izz * p * q * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
+            phi) + 2 * Izz * q * r * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
+            theta) + 2 * Iyy * q * r * ca.cos(theta) * ca.sin(phi) ** 2 * ca.sin(
+            theta))) / (Iyy * Izz * (ca.sin(theta) ** 2 - 1)),
         -(Iyy ** 2 * q ** 2 * ca.cos(theta) ** 2 * ca.sin(
             theta) - Iyy ** 2 * p * q * ca.cos(
             theta) ** 2 + Ixx * Iyy * p * q * ca.cos(
@@ -188,8 +222,8 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
             theta)) / (Iyy * Izz * ca.cos(theta)),
         ((Izz ** 2 * q * r * ca.sin(2 * theta)) / 2 - Izz ** 2 * p * r * ca.cos(
             theta) - (Ixx * Izz * q * r * ca.sin(2 * theta)) / 2 + (
-                     Iyy * Izz * q * r * ca.sin(
-                 2 * theta)) / 2 + Ixx * Izz * p * r * ca.cos(
+                 Iyy * Izz * q * r * ca.sin(
+             2 * theta)) / 2 + Ixx * Izz * p * r * ca.cos(
             theta) + Iyy * Izz * p * r * ca.cos(theta) - Izz * k * L * w2 * ca.sin(
             theta) + Izz * k * L * w4 * ca.sin(theta) - Iyy ** 2 * p * r * ca.cos(
             phi) ** 2 * ca.cos(theta) + Izz ** 2 * p * r * ca.cos(phi) ** 2 * ca.cos(
@@ -212,7 +246,7 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
             phi) - Ixx * Izz * p * q * ca.cos(phi) * ca.cos(theta) ** 2 * ca.sin(
             phi) - Ixx * Iyy * q * r * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(
             theta) + Ixx * Izz * q * r * ca.cos(phi) ** 2 * ca.cos(theta) * ca.sin(theta)) / (
-                    Iyy * Izz * ca.cos(theta) ** 2)
+                Iyy * Izz * ca.cos(theta) ** 2)
     )
 
     # Function to compute the state derivatives
@@ -222,7 +256,7 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
     # Define optimization variables
     # Delta_U = ca.MX.sym('Delta_U', 4, N)
     U = ca.MX.sym('U', 4, N)
-    X = ca.MX.sym('X', 12, N+1)
+    X = ca.MX.sym('X', 12, N + 1)
     # U_prev = ca.MX.sym('U_prev', 4, N+1)
 
     # Initial state parameter
@@ -243,14 +277,15 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
     for k in range(N):
         # yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[5, k])  # [x, y, z, theta]
         # yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[5, k], X[6,k], X[7,k], X[8,k])
-        yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[3, k], X[4,k], X[5,k])
+        yk = ca.vertcat(X[0, k], X[1, k], X[2, k], X[3, k], X[4, k], X[5, k])
         rk = reference_trajectory[:, k]
-        cost += ca.mtimes([(yk - rk).T, Q, (yk - rk)]) + ca.mtimes([(U[:, k]-nominal_mv).T, R, (U[:, k]-nominal_mv)])
+        cost += ca.mtimes([(yk - rk).T, Q, (yk - rk)]) + ca.mtimes(
+            [(U[:, k] - nominal_mv).T, R, (U[:, k] - nominal_mv)])
         # cost += ca.mtimes([(yk - rk).T, Q, (yk - rk)]) + ca.mtimes([Delta_U[:, k].T, R, Delta_U[:, k]])
         # cost += ca.mtimes([(U_prev[:,k] + Delta_U[:, k] - nominal_mv).T, V,(U_prev[:,k] + Delta_U[:, k] - nominal_mv)])  # Penalize deviation from nominal control target
         # cost += ca.mtimes([(X[:,k] - rk).T, Q, (X[:,k] - rk)]) + ca.mtimes([Delta_U[:, k].T, R, Delta_U[:, k]])
         # x_next = X[:, k] + T * f(X[:, k], Delta_U[:, k], U_prev[:,k])
-        x_next = X[:, k] + T * f(X[:, k], U[:,k])
+        x_next = X[:, k] + T * f(X[:, k], U[:, k])
         g.append(X[:, k + 1] - x_next)
         # if k > 0:
         #     delta_u = ca.fabs(U[:, k] - U[:, k - 1])
@@ -261,7 +296,7 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
     # Terminal cost
     # yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[4, N])
     # yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[5, N], X[6, N], X[7, N], X[8, N])
-    yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[3, N], X[4,N], X[5,N])
+    yN = ca.vertcat(X[0, N], X[1, N], X[2, N], X[3, N], X[4, N], X[5, N])
     rN = reference_trajectory[:, N]
     # cost += ca.mtimes([(X[:,N] - rN).T, Qn, (X[:,N] - rN)])
     cost += ca.mtimes([(yN - rN).T, Qn, (yN - rN)])
@@ -301,9 +336,9 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
     #     lbx[12 * (N + 1) + 4 * N + i] = -20
     #     ubx[12 * (N + 1) + 4 * N + i] = 20
 
-        # Initial guess for the optimization variables
+    # Initial guess for the optimization variables
     x0 = np.zeros((12, N + 1))
-    u_guess = np.zeros((4,N))
+    u_guess = np.zeros((4, N))
     # delta_u0 = np.zeros((4, N))
     # init_guess = np.concatenate([x0.flatten(), u_guess.flatten(),delta_u0.flatten()])
     init_guess = np.concatenate([x0.flatten(), u_guess.flatten()])
@@ -318,7 +353,7 @@ def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, V, N=50, T=
     # Extract the state trajectory
     X_sol = sol_x[:12 * (N + 1)].reshape((N + 1, 12)).T
     # Extract the control inputs
-    U_sol = sol_x[12 * (N + 1):16 * (N+1)].reshape((N, 4)).T
+    U_sol = sol_x[12 * (N + 1):16 * (N + 1)].reshape((N, 4)).T
 
     return X_sol, U_sol
 
@@ -428,16 +463,32 @@ def plot_results(X_sol, U_sol, ref_trajectory):
 
 
 # Function to evaluate dynamics given state and input
-def get_dyn(x, u):
+def get_dyn(x, u, blocks):
     # Constants
-    m = 2.05
+    if blocks == 0:
+        m = 2.05
+        Ixx = 6.622e-3
+        Iyy = 6.616e-3
+        Izz = 1.240e-2
+    if blocks == 1:
+        m = 2.55
+        Ixx = 7.065e-3
+        Iyy = 7.059e-3
+        Izz = 1.260e-2
+    if blocks == 2:
+        m = 3.05
+        Ixx = 8.445e-3
+        Iyy = 8.439e-3
+        Izz = 1.281e-2
+    if blocks == 3:
+        m = 3.55
+        Ixx = 1.139e-2
+        Iyy = 1.139e-2
+        Izz = 1.302e-2
     kF = 1.0
     kM = 1.0
     k = 1.0
     L = 0.07
-    Ixx = 6.622e-3
-    Iyy = 6.616e-3
-    Izz = 1.240e-2
     g = 9.81
 
     # State and control variables
@@ -445,7 +496,7 @@ def get_dyn(x, u):
     x_dot, y_dot, z_dot = x[6], x[7], x[8]
     p, q, r = x[9], x[10], x[11]
 
-    w1,w2,w3,w4 = u
+    w1, w2, w3, w4 = u
 
     # sigma1 = kF * (u[0] + u[1] + u[2] + u[3])
     xdot = np.array([
@@ -462,22 +513,50 @@ def get_dyn(x, u):
         -(Iyy ** 2 * q ** 2 * np.cos(theta) ** 2 * np.sin(theta) - Iyy ** 2 * p * q * np.cos(theta) ** 2 + Ixx * Iyy * p * q * np.cos(theta) ** 2 + Iyy * Izz * p * q * np.cos(theta) ** 2 - Iyy ** 2 * q ** 2 * np.cos(phi) ** 2 * np.cos(theta) ** 2 * np.sin(theta) + Izz ** 2 * q ** 2 * np.cos(phi) ** 2 * np.cos(theta) ** 2 * np.sin(theta) + Iyy ** 2 * p * q * np.cos(phi) ** 2 * np.cos(theta) ** 2 - Izz ** 2 * p * q * np.cos(phi) ** 2 * np.cos(theta) ** 2 + Iyy * k * L * w1 * np.cos(theta) - Iyy * k * L * w3 * np.cos(theta) - Ixx * Iyy * q ** 2 * np.cos(theta) ** 2 * np.sin(theta) - Iyy * k * L * w1 * np.cos(phi) ** 2 * np.cos(theta) + Iyy * k * L * w3 * np.cos(phi) ** 2 * np.cos(theta) + Izz * k * L * w1 * np.cos(phi) ** 2 * np.cos(theta) - Izz * k * L * w3 * np.cos(phi) ** 2 * np.cos(theta) + Ixx * Iyy * q ** 2 * np.cos(phi) ** 2 * np.cos(theta) ** 2 * np.sin(theta) - Ixx * Izz * q ** 2 * np.cos(phi) ** 2 * np.cos(theta) ** 2 * np.sin(theta) - Ixx * Iyy * p * q * np.cos(phi) ** 2 * np.cos(theta) ** 2 + Ixx * Izz * p * q * np.cos(phi) ** 2 * np.cos(theta) ** 2 - Iyy ** 2 * p * r * np.cos(phi) * np.cos(theta) * np.sin(phi) + Izz ** 2 * p * r * np.cos(phi) * np.cos(theta) * np.sin(phi) + Iyy ** 2 * q * r * np.cos(phi) * np.cos(theta) * np.sin(phi) * np.sin(theta) - Izz ** 2 * q * r * np.cos(phi) * np.cos(theta) * np.sin(phi) * np.sin(theta) + Ixx * Iyy * p * r * np.cos(phi) * np.cos(theta) * np.sin(phi) - Ixx * Izz * p * r * np.cos(phi) * np.cos(theta) * np.sin(phi) - Iyy * k * L * w2 * np.cos(phi) * np.sin(phi) * np.sin(theta) + Iyy * k * L * w4 * np.cos(phi) * np.sin(phi) * np.sin(theta) + Izz * k * L * w2 * np.cos(phi) * np.sin(phi) * np.sin(theta) - Izz * k * L * w4 * np.cos(phi) * np.sin(phi) * np.sin(theta) - Ixx * Iyy * q * r * np.cos(phi) * np.cos(theta) * np.sin(phi) * np.sin(theta) + Ixx * Izz * q * r * np.cos(phi) * np.cos(theta) * np.sin(phi) * np.sin(theta)) / (Iyy * Izz * np.cos(theta)),
         ((Izz ** 2 * q * r * np.sin(2 * theta)) / 2 - Izz ** 2 * p * r * np.cos(theta) - (Ixx * Izz * q * r * np.sin(2 * theta)) / 2 + (Iyy * Izz * q * r * np.sin(2 * theta)) / 2 + Ixx * Izz * p * r * np.cos(theta) + Iyy * Izz * p * r * np.cos(theta) - Izz * k * L * w2 * np.sin(theta) + Izz * k * L * w4 * np.sin(theta) - Iyy ** 2 * p * r * np.cos(phi) ** 2 * np.cos(theta) + Izz ** 2 * p * r * np.cos(phi) ** 2 * np.cos(theta) - Iyy * k * L * w2 * np.cos(phi) ** 2 * np.sin(theta) + Iyy * k * L * w4 * np.cos(phi) ** 2 * np.sin(theta) + Izz * k * L * w2 * np.cos(phi) ** 2 * np.sin(theta) - Izz * k * L * w4 * np.cos(phi) ** 2 * np.sin(theta) + Iyy ** 2 * q ** 2 * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) * np.sin(theta) - Izz ** 2 * q ** 2 * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) * np.sin(theta) - Iyy ** 2 * p * q * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) + Izz ** 2 * p * q * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) + Iyy ** 2 * q * r * np.cos(phi) ** 2 * np.cos(theta) * np.sin(theta) - Izz ** 2 * q * r * np.cos(phi) ** 2 * np.cos(theta) * np.sin(theta) + Ixx * Iyy * p * r * np.cos(phi) ** 2 * np.cos(theta) - Ixx * Izz * p * r * np.cos(phi) ** 2 * np.cos(theta) + Iyy * k * L * w1 * np.cos(phi) * np.cos(theta) * np.sin(phi) - Iyy * k * L * w3 * np.cos(phi) * np.cos(theta) * np.sin(phi) - Izz * k * L * w1 * np.cos(phi) * np.cos(theta) * np.sin(phi) + Izz * k * L * w3 * np.cos(phi) * np.cos(theta) * np.sin(phi) - Ixx * Iyy * q ** 2 * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) * np.sin(theta) + Ixx * Izz * q ** 2 * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) * np.sin(theta) + Ixx * Iyy * p * q * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) - Ixx * Izz * p * q * np.cos(phi) * np.cos(theta) ** 2 * np.sin(phi) - Ixx * Iyy * q * r * np.cos(phi) ** 2 * np.cos(theta) * np.sin(theta) + Ixx * Izz * q * r * np.cos(phi) ** 2 * np.cos(theta) * np.sin(theta)) / (Iyy * Izz * np.cos(theta) ** 2)
     ])
-    # xdot = np.array([
-    #     x_dot,
-    #     y_dot,
-    #     z_dot,
-    #     p * np.cos(phi) + r * np.sin(psi),
-    #     q - r * np.cos(psi) * np.tan(phi) + p * np.sin(psi) * np.tan(phi),
-    #     (r * np.cos(psi) - p * np.sin(psi)) / np.cos(phi),
-    #     (np.cos(theta) * np.sin(psi) + np.cos(psi) * np.sin(phi) * np.sin(theta)) * sigma1 / m,
-    #     ((np.sin(psi) * np.sin(theta) - np.cos(psi) * np.cos(theta) * np.sin(phi)) * sigma1 / m), #problem
-    #     (np.cos(phi) * np.cos(psi) * sigma1 / m) - m*g, #problem
-    #     (Iyy * q * r - Izz * q * r + L * kF * u[1] - L * kF * u[3]) / Ixx, #problem
-    #     -(Ixx * p * r - Izz * p * r + L * kF * u[0] + L * kF * u[2]) / Iyy, #problem
-    #     (kM * u[0] - kM * u[1] + kM * u[2] - kM * u[3] + Ixx * p * q - Iyy * p * q) / Izz #problem
-    # ])
 
     return xdot
+
+def drone_control(trajectory, initialstate, u_prev, dt, blocks):
+
+    reference_trajectory = np.zeros([12, np.shape(trajectory)[1]])
+
+    for i in range(0, np.shape(trajectory)[1]):
+        if i > 0:
+            reference_trajectory[:,i] = quad_control(trajectory[:4,i],trajectory[4:8,i],trajectory[8:12, i],trajectory[12:16,i],reference_trajectory[:,i-1], blocks)
+        else:
+            reference_trajectory[:,i] = quad_control(trajectory[:4, i], trajectory[4:8, i], trajectory[8:12, i],trajectory[12:16, i], initialstate, blocks)
+    # ref_trajectory = trajectory[:7,:]
+
+    ref_trajectory = np.vstack((circular[:3, :], np.zeros((3, np.shape(trajectory)[1]))))
+
+    N = 18
+    Q = 10 * np.diag([1, 1, 1, 1, 1, 1])
+    Qn = 10 * np.diag([1, 1, 1, 1, 1, 1])
+    R = 1 * np.diag([1, 1, 1, 1])
+    T = 50
+    x_mpc = np.zeros((T, 12, N + 1))
+    u_mpc = np.zeros((T, 4, N))
+    # x = initialstate.T
+    x = reference_trajectory[:,0]
+    X_sol = x
+
+    for t in range(T):
+        print(t)
+        x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:, t:], u_prev, Q, Qn, R, N, dt, blocks)
+        x = x+dt*get_dyn(x,u_mpc[t,:,0], blocks)
+        u_prev = u_mpc[t, :, 1]
+        X_sol = np.vstack((X_sol, x))
+        if t == 0:
+            U_sol = u_mpc[t, :, 0]
+        else:
+            U_sol = np.vstack((U_sol, u_mpc[t, :, 0]))
+
+    plot_results(X_sol.T, U_sol.T,ref_trajectory[:,0:T])
+    # plot_results(x_mpc[0], u_mpc[0], ref_trajectory[:, 0:N])
+
+    return x_mpc, u_mpc
+    #return X_sol, U_sol
+
 
 # Create a reference trajectory for [x, y, z, psi]
 # diff = np.linspace(4,2,N+1)
@@ -493,93 +572,14 @@ trajw = 2*np.pi*res/np.size(t)*cycles #frequency
 pathradius = 1
 tilt_amplitude = 0.1
 
-reference_trajectory = np.zeros([12, np.size(t)])
-initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
-
 for i in range(0, np.size(t)):
   circular[:, i] = np.transpose(np.array([pathradius*np.cos(trajw*t[i]), pathradius*np.sin(trajw*t[i]), tilt_amplitude*np.sin(trajw*t[i]/2), trajw*t[i], -pathradius*trajw*np.sin(trajw*t[i]), pathradius*trajw*np.cos(trajw*t[i]), tilt_amplitude*trajw/4*np.cos(trajw*t[i]/2),  trajw, -pathradius*trajw**2*np.cos(trajw*t[i]), -pathradius*trajw**2*np.sin(trajw*t[i]), -tilt_amplitude*trajw**2*np.sin(trajw*t[i]/2)/8, 0, pathradius*trajw**3*np.sin(trajw*t[i]), -pathradius*trajw**3*np.cos(trajw*t[i]), -tilt_amplitude*trajw**3*np.cos(trajw*t[i]/2)/16, 0]))
-  if i >0:
-    reference_trajectory[:,i] = quad_control(circular[0:4, i], circular[4:8, i], circular[8:12, i], circular[12:16, i],reference_trajectory[:,i-1])
-  else:
-    reference_trajectory[:, i] = quad_control(circular[0:4, i], circular[4:8, i], circular[8:12, i], circular[12:16, i], initial_state)
 
-
-
-ref_trajectory = np.vstack((circular[:3, :],np.zeros((3,np.size(t)))))  # Use position and orientation (x, y, z, theta)
-
-N = 18
-dt = 1 / res
-
-# Q = 20 * np.diag([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-# Qn = 20 * np.diag([1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1])
-Q = 10*np.diag([1, 1, 1, 1, 1, 1])
-Qn = 10*np.diag([1, 1, 1, 1, 1, 1])
-# Q = 20*np.diag([1, 1, 1, 1]) work well for OL
-# Qn = 20*np.diag([1, 1, 1, 1])
-R = 1*np.diag([1, 1, 1, 1])
-V = 1*np.diag([1, 1, 1, 1])
-# R = np.zeros((4,4))
-T = 50
+reference_trajectory = np.zeros([12, np.size(t)])
+initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
 u_prev = 5*np.ones(4)
-# u_prev = np.zeros(4)
-x_mpc = np.zeros((T, 12, N+1))
-u_mpc = np.zeros((T, 4, N))
-# x = initial_state.T
-x = reference_trajectory[:,0]
-X_sol = x
-for t in range(T):
-    print(t)
-    x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:,t:], u_prev, Q, Qn, R, V, N, dt)
-    x = x+dt*get_dyn(x,u_mpc[t,:,0])
-    # x = x_mpc[t,:,1] + dt * get_dyn(x_mpc[t,:,1], u_mpc[t, :, 2])
-    print(x-x_mpc[t,:,1])
-    print(u_mpc[t,:,1])
-    print()
-    u_prev = u_mpc[t,:,1]
-    X_sol = np.vstack((X_sol,x))
-    if t == 0:
-        U_sol = u_mpc[t,:,0]
-    else:
-        U_sol = np.vstack((U_sol,u_mpc[t,:,0]))
 
-    # x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:, t + t * (N - 1):], u_prev, Q, Qn, R, N, dt)
-    # for i in range(N):
-    #     x = x + dt * get_dyn(x, u_mpc[t, :, i + 1])
-    #     u_prev = u_mpc[t, :, -1]
-    #     X_sol = np.vstack((X_sol, x))
-    #     if t == 0 and i == 0:
-    #         U_sol = u_mpc[t, :, i]
-    #     else:
-    #         U_sol = np.vstack((U_sol, u_mpc[t, :, i]))
-
-# u_test = np.array([5.0276,5.0276,5.0276,5.0276])
-# x = np.zeros(12)
-# X_sol = x
-# dt = 0.001
-# for t in range(T):
-#     x = x + dt * get_dyn(x, u_test)
-#     X_sol = np.vstack((X_sol, x))
-# print('done')
-plot_results(X_sol.T, U_sol.T,ref_trajectory[:,0:T])
-# plot_results(x_mpc[0],u_mpc[0],ref_trajectory[:,0:N])
-# plot_results(X_sol.T, u_test.T,ref_trajectory[:,0:T])
-
-ref_x_values = ref_trajectory[0, :T]
-ref_y_values = ref_trajectory[1, :T]
-ref_z_values = ref_trajectory[2, :T]
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-for t in range(T):
-    x_values = x_mpc[t, 0, :]
-    y_values = x_mpc[t, 1, :]
-    z_values = x_mpc[t, 2, :]
-    ax.plot(x_values, y_values, z_values, label='OL trajectories')
-ax.plot(ref_x_values, ref_y_values, ref_z_values, label='Reference Trajectory', linestyle='dashed')
-ax.set_title('3D Trajectory of x, y, z')
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-# ax.legend()
-ax.set_aspect('equal')
-
-plt.show()
+x,u = drone_control(circular,initial_state, u_prev, 1/res, 0)
+x,u = drone_control(circular,initial_state, u_prev, 1/res, 1)
+x,u = drone_control(circular,initial_state, u_prev, 1/res, 2)
+x,u = drone_control(circular,initial_state, u_prev, 1/res, 3)
