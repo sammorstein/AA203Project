@@ -32,9 +32,9 @@ class DroneEnvironment:
         self.utility = np.zeros(gridsize)
         self.utility[tuple(self.warehouse)] = 0
         for i, h in enumerate(self.delivery):
-            self.utility[tuple(h)] = 10
+            self.utility[tuple(h)] = 100
         for obstacle in self.obstacles:
-            self.utility[tuple(obstacle)] = -100
+            self.utility[tuple(obstacle)] = -10000
         # print(self.utility)
 
     def isdone(self):
@@ -77,7 +77,7 @@ def value_iteration(k_max, drone_mdp, gamma):
     dim = np.array(drone_mdp.grid+(27,4))
     Qvalues = np.empty(dim)
     optimal_utility = np.copy(drone_mdp.utility)
-    alpha = 0.9
+    alpha = 0.5
     for k_iter in range(k_max):
         print('Iteration: ',k_iter)
         for i in range(dim[0]):
@@ -104,11 +104,11 @@ for i in range(20):
         for k in range(5):
             # if k < 2:
             #     obstacles.append((i,j,k))
-            if j < 7:
-                if i > 3:
+            if j < 9:
+                if i > 2:
                     obstacles.append((i,j,k))
-            if j > 13:
-                if i < 17:
+            if j > 11:
+                if i < 18:
                     obstacles.append((i,j,k))
 env = DroneEnvironment(grid_size, warehouse_pos, houses_location, obstacles)
 util = env.utility
