@@ -88,7 +88,7 @@ def quad_control(sdes, dsdes, ddsdes, dddsdes, x,blocks):
     return reference_state
 
 
-def solve_mpc(initial_state, reference_trajectory, prev_u, Q, Qn, R, N=50, T=0.1, blocks=0):
+def solve_mpc(initial_state, reference_trajectory, Q, Qn, R, N=50, T=0.1, blocks=0):
     # Constants
     if blocks == 0:
         m = 2.05
@@ -516,33 +516,39 @@ def get_dyn(x, u, blocks):
 
     return xdot
 
-def drone_control(trajectory, initialstate, u_prev, dt, blocks):
+def drone_control(trajectory, initialstate, dt, blocks):
 
-    reference_trajectory = np.zeros([12, np.shape(trajectory)[1]])
-
-    for i in range(0, np.shape(trajectory)[1]):
-        if i > 0:
-            reference_trajectory[:,i] = quad_control(trajectory[:4,i],trajectory[4:8,i],trajectory[8:12, i],trajectory[12:16,i],reference_trajectory[:,i-1], blocks)
-        else:
-            reference_trajectory[:,i] = quad_control(trajectory[:4, i], trajectory[4:8, i], trajectory[8:12, i],trajectory[12:16, i], initialstate, blocks)
+    # reference_trajectory = np.zeros([12, np.shape(trajectory)[1]])
+    #
+    # for i in range(0, np.shape(trajectory)[1]):
+    #     if i > 0:
+    #         reference_trajectory[:,i] = quad_control(trajectory[:4,i],trajectory[4:8,i],trajectory[8:12, i],trajectory[12:16,i],reference_trajectory[:,i-1], blocks)
+    #     else:
+    #         reference_trajectory[:,i] = quad_control(trajectory[:4, i], trajectory[4:8, i], trajectory[8:12, i],trajectory[12:16, i], initialstate, blocks)
     # ref_trajectory = trajectory[:7,:]
 
-    ref_trajectory = np.vstack((circular[:3, :], np.zeros((3, np.shape(trajectory)[1]))))
+    ref_trajectory = np.vstack((trajectory[:3, :], np.zeros((3, np.shape(trajectory)[1]))))
 
     N = 18
     Q = 10 * np.diag([1, 1, 1, 1, 1, 1])
     Qn = 10 * np.diag([1, 1, 1, 1, 1, 1])
     R = 1 * np.diag([1, 1, 1, 1])
-    T = 50
+    T = np.shape(ref_trajectory)[1]
+
+    # Pad the reference trajectory with the final position
+    final_position = ref_trajectory[:, -1].reshape(-1, 1)
+    padding = np.tile(final_position, (1, N))
+    ref_trajectory_padded = np.hstack((ref_trajectory, padding))
+
     x_mpc = np.zeros((T, 12, N + 1))
     u_mpc = np.zeros((T, 4, N))
-    # x = initialstate.T
-    x = reference_trajectory[:,0]
+    x = initialstate.T
+    # x = reference_trajectory[:,0]
     X_sol = x
 
     for t in range(T):
         print(t)
-        x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory[:, t:], u_prev, Q, Qn, R, N, dt, blocks)
+        x_mpc[t], u_mpc[t] = solve_mpc(x, ref_trajectory_padded[:, t:], Q, Qn, R, N, dt, blocks)
         x = x+dt*get_dyn(x,u_mpc[t,:,0], blocks)
         u_prev = u_mpc[t, :, 1]
         X_sol = np.vstack((X_sol, x))
@@ -562,24 +568,24 @@ def drone_control(trajectory, initialstate, u_prev, dt, blocks):
 # diff = np.linspace(4,2,N+1)
 # reference_trajectory = np.vstack((diff,diff,diff,np.zeros(N+1)))
 
-T = 30 #simulate for T seconds
-res = 10 #divide each second into res intervals
-t = np.linspace(0, T+2/res, res*T+2)
-
-circular = np.zeros([4*4, np.size(t)]) #flat outputs x, y, z, theta and their 1st, 2nd and 3rd derivatives
-cycles = 2 #go around this many times
-trajw = 2*np.pi*res/np.size(t)*cycles #frequency
-pathradius = 1
-tilt_amplitude = 0.1
-
-for i in range(0, np.size(t)):
-  circular[:, i] = np.transpose(np.array([pathradius*np.cos(trajw*t[i]), pathradius*np.sin(trajw*t[i]), tilt_amplitude*np.sin(trajw*t[i]/2), trajw*t[i], -pathradius*trajw*np.sin(trajw*t[i]), pathradius*trajw*np.cos(trajw*t[i]), tilt_amplitude*trajw/4*np.cos(trajw*t[i]/2),  trajw, -pathradius*trajw**2*np.cos(trajw*t[i]), -pathradius*trajw**2*np.sin(trajw*t[i]), -tilt_amplitude*trajw**2*np.sin(trajw*t[i]/2)/8, 0, pathradius*trajw**3*np.sin(trajw*t[i]), -pathradius*trajw**3*np.cos(trajw*t[i]), -tilt_amplitude*trajw**3*np.cos(trajw*t[i]/2)/16, 0]))
-
-reference_trajectory = np.zeros([12, np.size(t)])
-initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
-u_prev = 5*np.ones(4)
-
-x,u = drone_control(circular,initial_state, u_prev, 1/res, 0)
-x,u = drone_control(circular,initial_state, u_prev, 1/res, 1)
-x,u = drone_control(circular,initial_state, u_prev, 1/res, 2)
-x,u = drone_control(circular,initial_state, u_prev, 1/res, 3)
+# T = 30 #simulate for T seconds
+# res = 10 #divide each second into res intervals
+# t = np.linspace(0, T+2/res, res*T+2)
+#
+# circular = np.zeros([4*4, np.size(t)]) #flat outputs x, y, z, theta and their 1st, 2nd and 3rd derivatives
+# cycles = 2 #go around this many times
+# trajw = 2*np.pi*res/np.size(t)*cycles #frequency
+# pathradius = 1
+# tilt_amplitude = 0.1
+#
+# for i in range(0, np.size(t)):
+#   circular[:, i] = np.transpose(np.array([pathradius*np.cos(trajw*t[i]), pathradius*np.sin(trajw*t[i]), tilt_amplitude*np.sin(trajw*t[i]/2), trajw*t[i], -pathradius*trajw*np.sin(trajw*t[i]), pathradius*trajw*np.cos(trajw*t[i]), tilt_amplitude*trajw/4*np.cos(trajw*t[i]/2),  trajw, -pathradius*trajw**2*np.cos(trajw*t[i]), -pathradius*trajw**2*np.sin(trajw*t[i]), -tilt_amplitude*trajw**2*np.sin(trajw*t[i]/2)/8, 0, pathradius*trajw**3*np.sin(trajw*t[i]), -pathradius*trajw**3*np.cos(trajw*t[i]), -tilt_amplitude*trajw**3*np.cos(trajw*t[i]/2)/16, 0]))
+#
+# reference_trajectory = np.zeros([12, np.size(t)])
+# initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
+# u_prev = 5*np.ones(4)
+#
+# x,u = drone_control(circular,initial_state, u_prev, 1/res, 0)
+# x,u = drone_control(circular,initial_state, u_prev, 1/res, 1)
+# x,u = drone_control(circular,initial_state, u_prev, 1/res, 2)
+# x,u = drone_control(circular,initial_state, u_prev, 1/res, 3)
