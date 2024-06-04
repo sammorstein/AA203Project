@@ -8,6 +8,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import MPC_function
 from scipy.interpolate import CubicSpline
 from scipy.interpolate import splprep, splev
+from matplotlib import animation
 '''
 Replace with function of this from ML_PathPlanning
 '''
@@ -208,7 +209,7 @@ plt.title('Optimal Path in 3D')
 # Show the plot
 plt.show()
 '''
-Replace with function of this from ML_PathPlanning
+End replace with function of this from ML_PathPlanning
 '''
 def truncate_optimal_path(optimal_path):
     truncated_path = []
@@ -264,4 +265,44 @@ plt.show()
 
 initial_state = np.zeros(12)
 trajectory = np.array([x_smooth,y_smooth,z_smooth])
-MPC_function.drone_control(trajectory,initial_state,0.1,0)
+xvals,_ = MPC_function.drone_control(trajectory,initial_state,0.1,3)
+
+xvals = xvals.T
+# Initialize the figure and axes
+fig = plt.figure(figsize=(12, 5))
+ax = fig.add_subplot(111, projection='3d')
+
+# Animation function
+def drawframe(n):
+    ax.clear()
+    ax.plot3D([0, 1], [0, 0], [0, 0], color="red")
+    ax.plot3D([0, 0], [0, 1], [0, 0], color="green")
+    ax.plot3D([0, 0], [0, 0], [0, 1], color="blue")
+
+    ax.set_xlim(-2, 20)
+    ax.set_ylim(-2, 20)
+    ax.set_zlim(-2, 5)
+
+    x = np.linspace(0, 2, 1000)
+    y1 = np.sin(2 * np.pi * (x - 0.01 * n))
+    y2 = np.cos(2 * np.pi * (x - 0.01 * n))
+    ax.plot(x, y1, color='blue')
+    ax.plot(x, y2, color='red')
+
+    ax.scatter3D(xvals[0, n], xvals[1, n], xvals[2, n])
+
+    phi, psi, theta = float(xvals[3, n]), float(xvals[4, n]), float(xvals[5, n])
+    R = MPC_function.get_R(phi, psi, theta)
+
+    ax.plot3D([xvals[0, n], xvals[0, n] + R[0, 0]], [xvals[1, n], xvals[1, n] + R[1, 0]], [xvals[2, n], xvals[2, n] + R[2, 0]], color="red")
+    ax.plot3D([xvals[0, n], xvals[0, n] + R[0, 1]], [xvals[1, n], xvals[1, n] + R[1, 1]], [xvals[2, n], xvals[2, n] + R[2, 1]], color="green")
+    ax.plot3D([xvals[0, n], xvals[0, n] + R[0, 2]], [xvals[1, n], xvals[1, n] + R[1, 2]], [xvals[2, n], xvals[2, n] + R[2, 2]], color="blue")
+
+# Create the animation
+anim = animation.FuncAnimation(fig, drawframe, frames=np.size(xvals[0, :]), interval=20, blit=False)
+
+# Save the animation as a video file
+anim.save('drone_animation.mp4', writer='ffmpeg', fps=30)
+
+# Show the plot (animation window)
+plt.show()

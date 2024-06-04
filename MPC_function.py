@@ -88,6 +88,7 @@ def quad_control(sdes, dsdes, ddsdes, dddsdes, x,blocks):
     return reference_state
 
 
+
 def solve_mpc(initial_state, reference_trajectory, Q, Qn, R, N=50, T=0.1, blocks=0):
     # Constants
     if blocks == 0:
@@ -96,20 +97,20 @@ def solve_mpc(initial_state, reference_trajectory, Q, Qn, R, N=50, T=0.1, blocks
         Iyy = 6.616e-3
         Izz = 1.240e-2
     if blocks == 1:
-        m = 2.55
-        Ixx = 7.065e-3
-        Iyy = 7.059e-3
-        Izz = 1.260e-2
+        m = 2.15
+        Ixx = 6.711e-3
+        Iyy = 6.705e-3
+        Izz = 1.243e-2
     if blocks == 2:
-        m = 3.05
-        Ixx = 8.445e-3
-        Iyy = 8.439e-3
-        Izz = 1.281e-2
+        m = 2.25
+        Ixx = 6.987e-3
+        Iyy = 6.981e-3
+        Izz = 1.248e-2
     if blocks == 3:
-        m = 3.55
-        Ixx = 1.139e-2
-        Iyy = 1.139e-2
-        Izz = 1.302e-2
+        m = 2.35
+        Ixx = 7.575e-3
+        Iyy = 7.569e-3
+        Izz = 1.252e-2
     kF = 1.0
     kM = 1.0
     k = 1.0
@@ -471,20 +472,20 @@ def get_dyn(x, u, blocks):
         Iyy = 6.616e-3
         Izz = 1.240e-2
     if blocks == 1:
-        m = 2.55
-        Ixx = 7.065e-3
-        Iyy = 7.059e-3
-        Izz = 1.260e-2
+        m = 2.15
+        Ixx = 6.711e-3
+        Iyy = 6.705e-3
+        Izz = 1.243e-2
     if blocks == 2:
-        m = 3.05
-        Ixx = 8.445e-3
-        Iyy = 8.439e-3
-        Izz = 1.281e-2
+        m = 2.25
+        Ixx = 6.987e-3
+        Iyy = 6.981e-3
+        Izz = 1.248e-2
     if blocks == 3:
-        m = 3.55
-        Ixx = 1.139e-2
-        Iyy = 1.139e-2
-        Izz = 1.302e-2
+        m = 2.35
+        Ixx = 7.575e-3
+        Iyy = 7.569e-3
+        Izz = 1.252e-2
     kF = 1.0
     kM = 1.0
     k = 1.0
@@ -534,6 +535,7 @@ def drone_control(trajectory, initialstate, dt, blocks):
     Qn = 10 * np.diag([1, 1, 1, 1, 1, 1])
     R = 1 * np.diag([1, 1, 1, 1])
     T = np.shape(ref_trajectory)[1]
+    # T =50
 
     # Pad the reference trajectory with the final position
     final_position = ref_trajectory[:, -1].reshape(-1, 1)
@@ -560,11 +562,11 @@ def drone_control(trajectory, initialstate, dt, blocks):
     plot_results(X_sol.T, U_sol.T,ref_trajectory[:,0:T])
     # plot_results(x_mpc[0], u_mpc[0], ref_trajectory[:, 0:N])
 
-    return x_mpc, u_mpc
-    #return X_sol, U_sol
+    # return x_mpc, u_mpc
+    return X_sol, U_sol
 
 
-# Create a reference trajectory for [x, y, z, psi]
+#Create a reference trajectory for [x, y, z, psi]
 # diff = np.linspace(4,2,N+1)
 # reference_trajectory = np.vstack((diff,diff,diff,np.zeros(N+1)))
 
@@ -585,7 +587,7 @@ def drone_control(trajectory, initialstate, dt, blocks):
 # initial_state = np.array([1, 0, 0, -np.pi/7, 0, 0, 0, 0, 0, 0, 0, 0])
 # u_prev = 5*np.ones(4)
 #
-# x,u = drone_control(circular,initial_state, u_prev, 1/res, 0)
-# x,u = drone_control(circular,initial_state, u_prev, 1/res, 1)
-# x,u = drone_control(circular,initial_state, u_prev, 1/res, 2)
-# x,u = drone_control(circular,initial_state, u_prev, 1/res, 3)
+# x,u = drone_control(circular,initial_state, 1/res, 0)
+# x,u = drone_control(circular,initial_state, 1/res, 1)
+# x,u = drone_control(circular,initial_state, 1/res, 2)
+# x,u = drone_control(circular,initial_state, 1/res, 3)
