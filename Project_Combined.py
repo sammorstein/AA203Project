@@ -182,7 +182,8 @@ while not env.delivered.all():
 
         new_env = DroneEnvironment(grid_size, warehouse_pos, current_pos, houses_location, deliv, obstacles)
         Qvalues, opt_util = value_iteration(50,new_env,0.1)
-
+curr_payload, path_segment = simulate_optimal_path(Qvalues, current_pos, env.drone)
+optimal_path.extend((curr_payload, path_segment))
 # Print the optimal path
 print("Optimal Path:", optimal_path)
 for i, position in enumerate(optimal_path):
