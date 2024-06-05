@@ -17,68 +17,92 @@ class Drone:
         self.position = np.array(position)
         self.fuel = fuel
         self.payload = payload
-
+    
     def move(self, move):
-        self.position += np.array(move)
+        newpos = np.add(self.position, np.array(move))
+        self.position =newpos
         self.fuel -= np.linalg.norm(move) * self.payload
 
     def state(self):
         return tuple(self.position), self.fuel, self.payload
 
-
 class DroneEnvironment:
-    def __init__(self, gridsize, warehouse_location, houses_location, obstacles):
+    def __init__(self, gridsize, warehouse_location, init, houses_location, houses_delivered, obstacles):
         self.grid = gridsize
         self.warehouse = np.array(warehouse_location)
+        self.init = np.array(init)
         self.houses = [np.array(house) for house in houses_location]
-        self.drone = Drone(self.warehouse, 100, 0)
+        self.drone = Drone(self.warehouse, 100, np.array([0.1,0.1,0.1]))
         self.obstacles = [np.array(obstacle) for obstacle in obstacles]
-        self.delivered = np.zeros(len(self.houses), dtype=bool)
+        self.delivered = np.array(houses_delivered)
         self.delivery = self.houses.copy()
-
+        
         self.utility = np.zeros(gridsize)
-        self.utility[tuple(self.warehouse)] = 0
+        if self.delivered.all():
+            self.utility[(0,0,0)] = 9000
+        else:
+            self.utility[(0,0,0)] = -100
         for i, h in enumerate(self.delivery):
-            self.utility[tuple(h)] = 100
+            if self.delivered[i]:
+                self.utility[tuple(h)] = -100
+            else: 
+                self.utility[tuple(h)] = 90000
         for obstacle in self.obstacles:
-            self.utility[tuple(obstacle)] = -10000
+            self.utility[tuple(obstacle)] = -100
         # print(self.utility)
 
     def isdone(self):
         return np.all(self.delivered)
 
     def reset(self):
-        self.drone = Drone(self.warehouse, 10, 1)
+        self.drone = Drone(self.warehouse, 10, 0.1)
         self.delivered = np.zeros(len(self.houses), dtype=bool)
         self.delivery = self.houses.copy()
         return self.get_state()
-
+    
     def get_state(self):
         return self.drone.position, self.drone.fuel, self.delivery
 
     def step(self, action):
         prev_fuel = self.drone.fuel
+        action = np.array(action).astype(int)
         self.drone.move(action)
         cost = -(self.drone.fuel - prev_fuel)
-        # print('state',self.get_state()[0])
         future_state = self.get_state()
-        # print(future_state)
-        # print('utility at that state',self.utility[tuple(future_state[0])])
-        return self.get_state(), self.utility[tuple(future_state[0])], self.isdone()
+        
+        return self.get_state(), self.utility[tuple(future_state[0])]
 
     def possible_actions(self, pos):
-        possible_moves = np.array([[i, j, k] for i in [-1, 0, 1] for j in [-1, 0, 1] for k in [-1, 0, 1]])
+        possible_moves = np.array([[i, j, k] for i in [-1, 0, 1] for j in [-1, 0, 1] for k in [-1, 0, 1] ])
         valid_moves = []
         if pos == None:
             pos = self.drone.position
         for move in possible_moves:
             new_position = np.array(pos) + np.array(move)
             if (0 <= new_position[0] < self.grid[0] and
-                    0 <= new_position[1] < self.grid[1] and
-                    0 <= new_position[2] < self.grid[2]):
-                # print('new position', new_position)
-                valid_moves.append(move)
+                0 <= new_position[1] < self.grid[1] and
+                0 <= new_position[2] < self.grid[2]):
+                    valid_moves.append(move)
         return np.array(valid_moves)
+
+    def check_house(self, house):
+        for i in range(len(self.delivery)):
+
+            if tuple(house) == tuple(self.delivery[i]):
+                return i
+        return 100
+    
+    def reset_house(self, house):
+        house_idx = self.check_house(house)
+        if house_idx == 100:
+            return "house is not valid. stopped at the wrong location"
+        removed_house = self.delivery[house_idx]
+        self.delivered[house_idx] = True
+        self.drone.payload[int(house_idx)] = 0
+        print('payload weight has been reduced', self.drone.payload)
+        print('now new delivery locations',self.delivered)
+        
+        self.utility[tuple(removed_house)] = -100
 
 
 def value_iteration(k_max, drone_mdp, gamma):
@@ -94,7 +118,7 @@ def value_iteration(k_max, drone_mdp, gamma):
                     poss_a = drone_mdp.possible_actions((i, j, k))
                     current_cost = optimal_utility[i, j, k]
                     for a in range(len(poss_a)):
-                        next_step_cost = optimal_utility[i + poss_a[a][0], j + poss_a[a][1], k + poss_a[a][2]]
+                        next_step_cost = optimal_utility[i + poss_a[a][0], j + poss_a[a][1], k + poss_a[a][2]] - 0.001*np.linalg.norm(poss_a[a])*np.sum(env.drone.payload)
                         Qvalues[i, j, k, a] = np.append(poss_a[a], Qvalues[i, j, k, a, 3] + alpha * (
                                     current_cost + gamma * next_step_cost))
                         q__ = Qvalues[i, j, k]
@@ -105,86 +129,62 @@ def value_iteration(k_max, drone_mdp, gamma):
 # Initialize the environment
 grid_size = (20, 20, 5)
 warehouse_pos = (0, 0, 0)
-houses_location = [(19, 19, 4)]
+houses_location = [(0, 19, 0), (15,15,0), (19,0,0)]
+deliv = np.array([False, False, False])
 
 obstacles = []
 
-for i in range(20):
-    for j in range(20):
-        for k in range(5):
-            # if k < 2:
-            #     obstacles.append((i,j,k))
-            if j < 9:
-                if i > 2:
-                    obstacles.append((i, j, k))
-            if j > 11:
-                if i < 18:
-                    obstacles.append((i, j, k))
-env = DroneEnvironment(grid_size, warehouse_pos, houses_location, obstacles)
-util = env.utility
-Qvalues, opt_util = value_iteration(50, env, 0.1)
-
-# Extract the Q-values for plotting
-x, y, z, q_values = [], [], [], []
 for i in range(grid_size[0]):
     for j in range(grid_size[1]):
         for k in range(grid_size[2]):
-            Q = Qvalues[i, j, k]
-            Q = max(Q[:, 3])
-            if Q > 0:
-                x.append(i)
-                y.append(j)
-                z.append(k)
-                q_values.append(Q)
 
-# Create a 3D scatter plot
-if x:
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection='3d')
-    sc = ax.scatter(x, y, z, c=q_values, cmap='viridis')
-    plt.colorbar(sc, label='Q-Value')
-    ax.set_xlabel('X Coordinate')
-    ax.set_ylabel('Y Coordinate')
-    ax.set_zlabel('Z Coordinate')
-    plt.title('3D Plot of Q-Values (|Q| > 1)')
-    plt.show()
-else:
-    print("No points with |Q| != 0 to plot.")
+            if (5<i<15 and 5<j<15 and k < 3):
+                obstacles.append((i, j, k))
+            
+env = DroneEnvironment(grid_size, warehouse_pos,warehouse_pos, houses_location, deliv, obstacles)
+util = env.utility
+Qvalues, opt_util = value_iteration(50, env, 0.1)
 
-
-def simulate_optimal_path(Qvalues, warehouse_position):
+def simulate_optimal_path(Qvalues, warehouse_position, drone):
     current_position = warehouse_position
     path = [current_position]
 
     for _ in range(100):
-        # Extract the Q-values for the current position
-        i, j, k = current_position
-        Q = Qvalues[i, j, k]
-
-        # Find the action with the maximum Q-value
+        
+        Q = Qvalues[current_position]
         max_idx_q = np.argmax(Q[:, 3])
         optimal_action = Q[max_idx_q, :3]
-
-        # Calculate the next position based on the optimal action
+        if tuple(optimal_action) == (0,0,0):
+            optimal_action = (0,0,1)
         next_position = tuple(int(x) for x in np.array(current_position) + optimal_action)
-
-        # Append the next position to the path
         path.append(next_position)
 
-        # Check if the next position is a terminal state (i.e., no more value to gain)
-        if np.all(Q[max_idx_q, 3] == 0):
+        if env.check_house(next_position) < 10:
+            print('this the position???', next_position)
             break
-
-        # Update the current position
         current_position = next_position
-    return path
+    return np.sum(drone.payload), path
 
 
 # Simulate the optimal path starting from the warehouse position
-optimal_path = simulate_optimal_path(Qvalues, warehouse_pos)
+optimal_path = []
+current_pos = warehouse_pos
+while not env.delivered.all():
+
+    curr_payload, path_segment = simulate_optimal_path(Qvalues, current_pos, env.drone)
+    optimal_path.extend((curr_payload,path_segment))
+    current_pos = path_segment[-1]
+    if env.check_house(current_pos) < 10:
+        '''
+        only need to do this if the current end position is a house '''
+        env.reset_house(current_pos)
+        deliv = env.delivered
+
+        new_env = DroneEnvironment(grid_size, warehouse_pos, current_pos, houses_location, deliv, obstacles)
+        Qvalues, opt_util = value_iteration(50,new_env,0.1)
 
 # Print the optimal path
-print("Optimal Path:")
+print("Optimal Path:", optimal_path)
 for i, position in enumerate(optimal_path):
     print(f"Step {i + 1}: {position}")
 

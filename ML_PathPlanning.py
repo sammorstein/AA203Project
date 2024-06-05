@@ -34,10 +34,6 @@ class DroneEnvironment:
         self.delivery = self.houses.copy()
         
         self.utility = np.zeros(gridsize)
-        '''
-        sets the value of utilies of each of the states to -10 for the warehouse, -1000 for any obstacles, 
-        and 900 for the goal houses, -100 for the houses already visted
-        '''
         self.utility[(0,0,0)] = -100 # ideally should be a function of how much battery left
         for i, h in enumerate(self.delivery):
             if self.delivered[i]:
@@ -91,9 +87,6 @@ class DroneEnvironment:
         return 100
     
     def reset_house(self, house):
-        '''
-        set the utility of a house once a package to delivered to negative so that it repels the drone to deliver the next package.
-        '''
         house_idx = self.check_house(house)
         if house_idx == 100:
             return "house is not valid. stopped at the wrong location"
@@ -142,11 +135,8 @@ obstacles = []
 for i in range(grid_size[0]):
     for j in range(grid_size[1]):
         for k in range(grid_size[2]):
-            # Check if the point falls within the specified obstacle regions
-            if (i < 3 and 5 < j < 15 and k < 2) or \
-               (i > 17 and 5 < j < 15 and k < 2) or \
-               (5 < i < 15 and j < 3 and k < 2) or \
-               (5 < i < 15 and j > 17 and k < 2):
+
+            if (5<i<15 and 5<j<15 and k < 3):
                 obstacles.append((i, j, k))
             
 env = DroneEnvironment(grid_size, warehouse_pos,warehouse_pos, houses_location, deliv, obstacles)
@@ -194,36 +184,25 @@ fig.update_layout(
 fig.show()
 
 
-def simulate_optimal_path(Qvalues, warehouse_position):
+def simulate_optimal_path(Qvalues, warehouse_position, drone):
     current_position = warehouse_position
     path = [current_position]
 
     for _ in range(100):
-        # Extract the Q-values for the current position
-        # i = current_position[0]
-        # j = current_position[1]
-        # k = current_position[2]
         
         Q = Qvalues[current_position]
-
-        # Find the action with the maximum Q-value
         max_idx_q = np.argmax(Q[:, 3])
         optimal_action = Q[max_idx_q, :3]
         if tuple(optimal_action) == (0,0,0):
             optimal_action = (0,0,1)
-        # Calculate the next position based on the optimal action
         next_position = tuple(int(x) for x in np.array(current_position) + optimal_action)
-
-        # Append the next position to the path
         path.append(next_position)
 
         if env.check_house(next_position) < 10:
             print('this the position???', next_position)
             break
-
-        # Update the current position
         current_position = next_position
-    return path
+    return drone.payload, path
 
 def monte_carlo_rollout(Qvalues, env):
     mc = 10
@@ -277,12 +256,10 @@ def monte_carlo_rollout(Qvalues, env):
 optimal_path = []
 current_pos = warehouse_pos
 # env.reset_house(env.delivery[j])
-mdp_env = DroneEnvironment(grid_size, warehouse_pos, warehouse_pos, houses_location, deliv, obstacles)
-iter = 0
 while not env.delivered.all():
 
-    path_segment = simulate_optimal_path(Qvalues, current_pos)
-    optimal_path.extend(path_segment)
+    curr_payload, path_segment = simulate_optimal_path(Qvalues, current_pos, env.drone)
+    optimal_path.extend((curr_payload,path_segment))
     current_pos = path_segment[-1]
     if env.check_house(current_pos) < 10:
         '''
@@ -294,13 +271,6 @@ while not env.delivered.all():
         Qvalues, opt_util = value_iteration(50,new_env,0.1)
     if iter > 5:
         break
-    iter+=1
-# optimal_path = simulate_optimal_path(Qvalues, warehouse_pos)
-# new_pos = optimal_path[-1]
-# env.reset_house(current_pos)
-# new_Qvalues = value_iteration(50,env, 0.1)
-# print(new_pos)
-# optimal_path2 = simulate_optimal_path(new_Qvalues, new_pos)
 '''
 fuel/time cost: 
 - sort of works, i guess we need to calculate total fuel cost and time cost
@@ -319,9 +289,10 @@ print("Optimal Path:", optimal_path)
 #     print(f"Step {i + 1}: {position}")
 
 # Extract x, y, z coordinates from the path
-x_path = [position[0] for position in optimal_path]
-y_path = [position[1] for position in optimal_path]
-z_path = [position[2] for position in optimal_path]
+for segment in optimal_path(2):
+    x_path = [position[0] for position in optimal_path]
+    y_path = [position[1] for position in optimal_path]
+    z_path = [position[2] for position in optimal_path]
 
 # Create a 3D plot
 fig = plt.figure()
@@ -331,9 +302,6 @@ ax = fig.add_subplot(111, projection='3d')
 norm = plt.Normalize(0, len(x_path) - 1)
 cmap = plt.get_cmap('viridis')  # You can choose any colormap
 
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 
 # Extract x, y, z coordinates from the path
 x_path = [position[0] for position in optimal_path]
@@ -383,11 +351,11 @@ def plot_block(ax, x_start, x_end, y_start, y_end, z_start, z_end, color='black'
     ax.plot_surface(xx, yy_end, zz, color=color, alpha=0.5)
 
 # Plot the obstacle block
-# plot_block(ax, 4, 16, 4, 16, 0, 3, color='black')
-plot_block(ax, 0,3,5,15,0,2,color='black')
-plot_block(ax, 17,20,5,15,0,2,color='black')
-plot_block(ax, 5,15,0,3,0,2,color='black')
-plot_block(ax, 5,15,17,20,0,2,color='black')
+plot_block(ax, 7, 13, 7, 13, 0, 2, color='black')
+# plot_block(ax, 0,3,5,15,0,2,color='black')
+# plot_block(ax, 17,20,5,15,0,2,color='black')
+# plot_block(ax, 5,15,0,3,0,2,color='black')
+# plot_block(ax, 5,15,17,20,0,2,color='black')
 
 # Set axis limits
 ax.set_xlim(0, 20)
