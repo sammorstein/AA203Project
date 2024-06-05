@@ -562,6 +562,12 @@ def drone_control(trajectory, initialstate, dt, blocks):
     plot_results(X_sol.T, U_sol.T,ref_trajectory[:,0:T])
     # plot_results(x_mpc[0], u_mpc[0], ref_trajectory[:, 0:N])
 
+    diff = np.linalg.norm(X_sol[:,:3].T-ref_trajectory_padded[:3,:T+1])
+    print(f'Tracking error: {diff}')
+
+    tot_u = np.linalg.norm(U_sol)
+    print(f'Total control cost: {tot_u}')
+
     # return x_mpc, u_mpc
     return X_sol, U_sol
 
