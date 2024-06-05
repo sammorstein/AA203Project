@@ -283,11 +283,7 @@ def drawframe(n):
     ax.set_ylim(-2, 20)
     ax.set_zlim(-2, 5)
 
-    x = np.linspace(0, 2, 1000)
-    y1 = np.sin(2 * np.pi * (x - 0.01 * n))
-    y2 = np.cos(2 * np.pi * (x - 0.01 * n))
-    ax.plot(x, y1, color='blue')
-    ax.plot(x, y2, color='red')
+
 
     ax.scatter3D(xvals[0, n], xvals[1, n], xvals[2, n])
 
