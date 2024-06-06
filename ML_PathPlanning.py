@@ -34,7 +34,10 @@ class DroneEnvironment:
         self.delivery = self.houses.copy()
         
         self.utility = np.zeros(gridsize)
-        self.utility[(0,0,0)] = -100 # ideally should be a function of how much battery left
+        if self.delivered.all():
+            self.utility[(0,0,0)] = 90000
+        else:
+            self.utility[(0,0,0)] = -100 # ideally should be a function of how much battery left
         for i, h in enumerate(self.delivery):
             if self.delivered[i]:
                 self.utility[tuple(h)] = -100
@@ -168,7 +171,8 @@ fig = go.Figure(data=go.Isosurface(
     isomax=max(q_values),
     surface_count=10,  # Number of isosurfaces
     colorscale='Viridis',
-    caps=dict(x_show=False, y_show=False, z_show=False)
+    caps=dict(x_show=False, y_show=False, z_show=False),
+    opacity=0.5
 ))
 
 fig.update_layout(
@@ -198,7 +202,7 @@ def simulate_optimal_path(Qvalues, warehouse_position, drone):
         next_position = tuple(int(x) for x in np.array(current_position) + optimal_action)
         path.append(next_position)
 
-        if env.check_house(next_position) < 10:
+        if env.check_house(next_position) < 10 or next_position == (0,0,0):
             print('this the position???', next_position)
             break
         current_position = next_position
@@ -256,8 +260,10 @@ def monte_carlo_rollout(Qvalues, env):
 optimal_path = []
 current_pos = warehouse_pos
 # env.reset_house(env.delivery[j])
+iter = 0
 while not env.delivered.all():
-
+    print('another loop')
+    iter+=1
     curr_payload, path_segment = simulate_optimal_path(Qvalues, current_pos, env.drone)
     optimal_path.extend((curr_payload,path_segment))
     current_pos = path_segment[-1]
@@ -271,6 +277,8 @@ while not env.delivered.all():
         Qvalues, opt_util = value_iteration(50,new_env,0.1)
     if iter > 5:
         break
+curr_payload, path_segment = simulate_optimal_path(Qvalues, current_pos, env.drone)
+optimal_path.extend((curr_payload, path_segment))
 '''
 fuel/time cost: 
 - sort of works, i guess we need to calculate total fuel cost and time cost
@@ -288,44 +296,36 @@ print("Optimal Path:", optimal_path)
 # for i, position in enumerate(optimal_path):
 #     print(f"Step {i + 1}: {position}")
 
-# Extract x, y, z coordinates from the path
-for segment in optimal_path(2):
-    x_path = [position[0] for position in optimal_path]
-    y_path = [position[1] for position in optimal_path]
-    z_path = [position[2] for position in optimal_path]
+# Extract the paths
+paths = optimal_path[1::2]  # Every second element starting from index 1
+values = optimal_path[0::2]  # Every second element starting from index 0
 
 # Create a 3D plot
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
-# Normalize the color range to the number of segments
-norm = plt.Normalize(0, len(x_path) - 1)
-cmap = plt.get_cmap('viridis')  # You can choose any colormap
+colors = ['viridis', 'viridis', 'viridis', 'viridis']  # Different colormaps for each trajectory
 
+for path, value, color in zip(paths, values, colors):
+    x_path = [position[0] for position in path]
+    y_path = [position[1] for position in path]
+    z_path = [position[2] for position in path]
 
-# Extract x, y, z coordinates from the path
-x_path = [position[0] for position in optimal_path]
-y_path = [position[1] for position in optimal_path]
-z_path = [position[2] for position in optimal_path]
+    # Normalize the color range to the number of segments
+    norm = plt.Normalize(0, len(x_path) - 1)
+    cmap = plt.get_cmap(color)
 
-# Create a 3D plot
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-
-# Normalize the color range to the number of segments
-norm = plt.Normalize(0, len(x_path) - 1)
-cmap = plt.get_cmap('viridis')  # You can choose any colormap
-
-# Plot each segment with a different color
-for i in range(len(x_path) - 1):
-    ax.plot(
-        x_path[i:i+2],
-        y_path[i:i+2],
-        z_path[i:i+2],
-        color=cmap(norm(i)),
-        marker='o',
-        markersize=5
-    )
+    # Plot each segment with a different color
+    for i in range(len(x_path) - 1):
+        ax.plot(
+            x_path[i:i+2],
+            y_path[i:i+2],
+            z_path[i:i+2],
+            color=cmap(norm(i)),
+            marker='o',
+            markersize=5,
+            label=f'Path with value {value}' if i == 0 else ""
+        )
 
 # Function to create a block
 def plot_block(ax, x_start, x_end, y_start, y_end, z_start, z_end, color='black'):
@@ -352,10 +352,6 @@ def plot_block(ax, x_start, x_end, y_start, y_end, z_start, z_end, color='black'
 
 # Plot the obstacle block
 plot_block(ax, 7, 13, 7, 13, 0, 2, color='black')
-# plot_block(ax, 0,3,5,15,0,2,color='black')
-# plot_block(ax, 17,20,5,15,0,2,color='black')
-# plot_block(ax, 5,15,0,3,0,2,color='black')
-# plot_block(ax, 5,15,17,20,0,2,color='black')
 
 # Set axis limits
 ax.set_xlim(0, 20)
@@ -366,7 +362,12 @@ ax.set_zlim(0, 5)
 ax.set_xlabel('X Coordinate')
 ax.set_ylabel('Y Coordinate')
 ax.set_zlabel('Z Coordinate')
-plt.title('Optimal Path in 3D')
+plt.title('Optimal Paths in 3D')
+
+# Add a legend
+handles, labels = ax.get_legend_handles_labels()
+by_label = dict(zip(labels, handles))
+ax.legend(by_label.values(), by_label.keys())
 
 # Show the plot
 plt.show()
