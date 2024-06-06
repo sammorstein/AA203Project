@@ -39,7 +39,7 @@ class DroneEnvironment:
         
         self.utility = np.zeros(gridsize)
         if self.delivered.all():
-            self.utility[(0,0,0)] = 9000
+            self.utility[(0,0,0)] = 90000
         else:
             self.utility[(0,0,0)] = -100
         for i, h in enumerate(self.delivery):
@@ -189,45 +189,44 @@ print("Optimal Path:", optimal_path)
 for i, position in enumerate(optimal_path):
     print(f"Step {i + 1}: {position}")
 
+path_3_blocks = optimal_path[1]
+path_2_blocks = optimal_path[3]
+path_1_blocks = optimal_path[5]
+path_0_blocks = optimal_path[7]
+
+index = path_0_blocks.index((1, 1, 1))
+
+# Slice the path to keep elements up to the point right before the first (1, 1, 1)
+path_0_blocks = path_0_blocks[:index]
+
+# Add (1, 0, 0) and (0, 0, 0) to the shortened path
+path_0_blocks.extend([(1, 0, 0), (0, 0, 0)])
+
 # Extract x, y, z coordinates from the path
-x_path = [position[0] for position in optimal_path]
-y_path = [position[1] for position in optimal_path]
-z_path = [position[2] for position in optimal_path]
+x_path_3 = [position[0] for position in path_3_blocks]
+y_path_3 = [position[1] for position in path_3_blocks]
+z_path_3 = [position[2] for position in path_3_blocks]
 
-# Create a 3D plot
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+x_path_2 = [position[0] for position in path_2_blocks]
+y_path_2 = [position[1] for position in path_2_blocks]
+z_path_2 = [position[2] for position in path_2_blocks]
 
-# Plot the optimal path
-ax.plot(x_path, y_path, z_path, marker='o', markersize=5, color='blue')
+x_path_1 = [position[0] for position in path_1_blocks]
+y_path_1 = [position[1] for position in path_1_blocks]
+z_path_1 = [position[2] for position in path_1_blocks]
 
-# Set labels and title
-ax.set_xlabel('X Coordinate')
-ax.set_ylabel('Y Coordinate')
-ax.set_zlabel('Z Coordinate')
-plt.title('Optimal Path in 3D')
+x_path_0 = [position[0] for position in path_0_blocks]
+y_path_0 = [position[1] for position in path_0_blocks]
+z_path_0 = [position[2] for position in path_0_blocks]
 
-# Show the plot
-plt.show()
-'''
-End replace with function of this from ML_PathPlanning
-'''
-def truncate_optimal_path(optimal_path):
-    truncated_path = []
-    for i in range(1, len(optimal_path)):
-        if optimal_path[i] == optimal_path[i - 1]:
-            break
-        truncated_path.append(optimal_path[i - 1])
-    truncated_path.append(optimal_path[i - 1])  # Add the last moving step
-    return truncated_path
+x_path = x_path_3 + x_path_2 + x_path_1 + x_path_0
+y_path = y_path_3 + y_path_2 + y_path_1 + y_path_0
+z_path = z_path_3 + z_path_2 + z_path_1 + z_path_0
 
-truncated_path = truncate_optimal_path(optimal_path)
-
-t = np.arange(len(truncated_path))
-
-x_path = [position[0] for position in truncated_path]
-y_path = [position[1] for position in truncated_path]
-z_path = [position[2] for position in truncated_path]
+# Print the combined paths
+print("Combined x_path:", x_path)
+print("Combined y_path:", y_path)
+print("Combined z_path:", z_path)
 
 # # Create CubicSpline objects for each coordinate
 # cs_x = CubicSpline(t, x_path)
@@ -240,9 +239,21 @@ z_path = [position[2] for position in truncated_path]
 # y_smooth = cs_y(t_dense)
 # z_smooth = cs_z(t_dense)
 
-tck, u = splprep([x_path, y_path, z_path], s=3)  # Increase the smoothing factor `s` for more smoothing
+tck, u = splprep([x_path_3, y_path_3, z_path_3], s=3)  # Increase the smoothing factor `s` for more smoothing
 u_dense = np.linspace(0, 1, 300)
-x_smooth, y_smooth, z_smooth = splev(u_dense, tck)
+x_smooth_3, y_smooth_3, z_smooth_3 = splev(u_dense, tck)
+
+tck, u = splprep([x_path_2, y_path_2, z_path_2], s=3)  # Increase the smoothing factor `s` for more smoothing
+u_dense = np.linspace(0, 1, 300)
+x_smooth_2, y_smooth_2, z_smooth_2 = splev(u_dense, tck)
+
+tck, u = splprep([x_path_1, y_path_1, z_path_1], s=3)  # Increase the smoothing factor `s` for more smoothing
+u_dense = np.linspace(0, 1, 300)
+x_smooth_1, y_smooth_1, z_smooth_1 = splev(u_dense, tck)
+
+tck, u = splprep([x_path_0, y_path_0, z_path_0], s=3)  # Increase the smoothing factor `s` for more smoothing
+u_dense = np.linspace(0, 1, 300)
+x_smooth_0, y_smooth_0, z_smooth_0 = splev(u_dense, tck)
 
 # Create a 3D plot for the smooth path
 fig = plt.figure()
@@ -252,7 +263,11 @@ ax = fig.add_subplot(111, projection='3d')
 ax.plot(x_path, y_path, z_path, marker='o', markersize=5, color='blue', linestyle='--', label='Original Path')
 
 # Plot the smooth path
-ax.plot(x_smooth, y_smooth, z_smooth, color='red', label='Smooth Path')
+ax.plot(x_smooth_3, y_smooth_3, z_smooth_3, color='red', label='Smooth Path 3 Blocks')
+ax.plot(x_smooth_2, y_smooth_2, z_smooth_2, color='red', label='Smooth Path 2 Blocks')
+ax.plot(x_smooth_1, y_smooth_1, z_smooth_1, color='red', label='Smooth Path 1 Block')
+ax.plot(x_smooth_0, y_smooth_0, z_smooth_0, color='red', label='Smooth Path 0 Blocks')
+
 
 # Set labels and title
 ax.set_xlabel('X Coordinate')
@@ -263,15 +278,60 @@ plt.legend()
 
 # Show the plot
 plt.show()
-
+#
 initial_state = np.zeros(12)
-trajectory = np.array([x_smooth,y_smooth,z_smooth])
-xvals,_ = MPC_function.drone_control(trajectory,initial_state,0.1,3)
+trajectory_3 = np.array([x_smooth_3,y_smooth_3,z_smooth_3])
+trajectory_2 = np.array([x_smooth_2,y_smooth_2,z_smooth_2])
+trajectory_1 = np.array([x_smooth_1,y_smooth_1,z_smooth_1])
+trajectory_0 = np.array([x_smooth_0,y_smooth_0,z_smooth_0])
+xvals_3,_ = MPC_function.drone_control(trajectory_3,initial_state,0.1,3)
+initial_state = xvals_3[-1,:]
+xvals_3 = xvals_3.T
+xvals_2,_ = MPC_function.drone_control(trajectory_2,initial_state,0.1,2)
+initial_state = xvals_2[-1,:]
+xvals_2 = xvals_2.T
+xvals_1,_ = MPC_function.drone_control(trajectory_1,initial_state,0.1,1)
+initial_state = xvals_1[-1,:]
+xvals_1 = xvals_1.T
+xvals_0,_ = MPC_function.drone_control(trajectory_0,initial_state,0.1,0)
+initial_state = xvals_0[-1,:]
+xvals_0 = xvals_0.T
 
-xvals = xvals.T
+xvals = np.hstack((xvals_3,xvals_2,xvals_1,xvals_0))
+
 # Initialize the figure and axes
 fig = plt.figure(figsize=(12, 5))
 ax = fig.add_subplot(111, projection='3d')
+
+ax.set_xlabel('X Coordinate')
+ax.set_ylabel('Y Coordinate')
+ax.set_zlabel('Z Coordinate')
+plt.title('Drone Delivery Full')
+
+def plot_block(ax, x_start, x_end, y_start, y_end, z_start, z_end, color='black'):
+    xx, yy = np.meshgrid([x_start, x_end], [y_start, y_end])
+    zz_start = np.full_like(xx, z_start)
+    zz_end = np.full_like(xx, z_end)
+
+    ax.plot_surface(xx, yy, zz_start, color=color, alpha=0.5)
+    ax.plot_surface(xx, yy, zz_end, color=color, alpha=0.5)
+
+    yy, zz = np.meshgrid([y_start, y_end], [z_start, z_end])
+    xx_start = np.full_like(yy, x_start)
+    xx_end = np.full_like(yy, x_end)
+
+    ax.plot_surface(xx_start, yy, zz, color=color, alpha=0.5)
+    ax.plot_surface(xx_end, yy, zz, color=color, alpha=0.5)
+
+    xx, zz = np.meshgrid([x_start, x_end], [z_start, z_end])
+    yy_start = np.full_like(xx, y_start)
+    yy_end = np.full_like(xx, y_end)
+
+    ax.plot_surface(xx, yy_start, zz, color=color, alpha=0.5)
+    ax.plot_surface(xx, yy_end, zz, color=color, alpha=0.5)
+
+
+
 
 # Animation function
 def drawframe(n):
@@ -284,7 +344,8 @@ def drawframe(n):
     ax.set_ylim(-2, 20)
     ax.set_zlim(-2, 5)
 
-
+    # Plot the obstacle block
+    plot_block(ax, 7, 13, 7, 13, 0, 2, color='black')
 
     ax.scatter3D(xvals[0, n], xvals[1, n], xvals[2, n])
 
